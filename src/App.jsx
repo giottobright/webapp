@@ -1,29 +1,35 @@
 import React, { useMemo } from 'react'
 import { PERSONAS } from './personas'
 
-const tg = (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null
+function getTg() {
+  if (typeof window === 'undefined') return null
+  return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null
+}
 
 export default function App() {
   React.useEffect(() => {
-    if (tg) {
-      tg.ready()
-      try { tg.expand() } catch (_) {}
-      try { tg.MainButton.hide() } catch (_) {}
+    const t = getTg()
+    if (t) {
+      t.ready()
+      try { t.expand() } catch (_) {}
+      try { t.MainButton.hide() } catch (_) {}
     }
   }, [])
 
   const handleSelect = (code) => {
     const payload = JSON.stringify({ persona: code })
-    if (tg) {
-      tg.sendData(payload)
-      try { tg.HapticFeedback.impactOccurred('light') } catch (_) {}
+    const t = getTg()
+    if (t) {
+      t.sendData(payload)
+      try { t.HapticFeedback.impactOccurred('light') } catch (_) {}
     } else {
       alert('Telegram WebApp ortamı yok / Нет окружения Telegram WebApp')
     }
   }
 
   const handleClose = () => {
-    if (tg) tg.close()
+    const t = getTg()
+    if (t) t.close()
     else alert('Telegram WebApp kapatılamıyor / Невозможно закрыть WebApp')
   }
 
