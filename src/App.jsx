@@ -1,6 +1,22 @@
 import React, { useMemo } from 'react'
 import { PERSONAS } from './personas'
 
+// Vite will bundle static photos from /photo using import.meta.glob
+const PHOTO_GLOB = import.meta && import.meta.glob ? import.meta.glob('../photo/*.{png,jpg,jpeg,webp,avif}', { eager: true }) : {}
+
+function getPhotoSrcByCode(code) {
+  // Expect filenames like: elif.jpg, zeynep.webp, etc.
+  const entry = Object.entries(PHOTO_GLOB).find(([path]) => {
+    const file = path.split('/').pop() || ''
+    const base = file.replace(/\.(png|jpg|jpeg|webp|avif)$/i, '')
+    return base.toLowerCase() === String(code).toLowerCase()
+  })
+  if (!entry) return null
+  const mod = entry[1]
+  // Vite glob eager returns either { default: url } or just url depending on asset type
+  return (mod && mod.default) ? mod.default : mod
+}
+
 function getTg() {
   if (typeof window === 'undefined') return null
   return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null
@@ -34,34 +50,40 @@ export default function App() {
   }
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', padding: 16 }}>
-      <h2 style={{ marginTop: 0 }}>
-        Kızını seç ve sohbet et / Выбери девушку и общайся
-      </h2>
-      <p style={{ opacity: 0.8 }}>
-        Tüm yanıtlar önce Türkçe, sonra aynı mesajda Rusça kopyalanır. <br/>
-        Все ответы сначала на турецком, затем дублируются на русском.
-      </p>
+    <div className="app">
+      <header className="header">
+        <h2 className="title">Kızını seç ve sohbet et / Выбери девушку и общайся</h2>
+        <p className="subtitle">
+          Tüm yanıtlar önce Türkçe, sonra aynı mesajda Rusça kopyalanır. <br/>
+          Все ответы сначала на турецком, затем дублируются на русском.
+        </p>
+      </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-        {PERSONAS.map(p => (
-          <div key={p.code} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, background: 'white' }}>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name_tr} / {p.name_ru}</div>
-            <div style={{ marginTop: 6, color: '#555' }}>{p.tagline_tr} — {p.tagline_ru}</div>
-            <div style={{ height: 120, marginTop: 8, background: '#f4f4f4', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-              Foto sonra eklenecek / Фото добавим позже
+      <div className="grid">
+        {PERSONAS.map(p => {
+          const src = getPhotoSrcByCode(p.code)
+          return (
+            <div key={p.code} className="card">
+              <div className="badge">{p.code}</div>
+              <div className="card-title">{p.name_tr} / {p.name_ru}</div>
+              <div className="card-tagline">{p.tagline_tr} — {p.tagline_ru}</div>
+              <div className="photo">
+                {src ? (
+                  <img src={src} alt={`${p.name_tr} / ${p.name_ru}`} loading="lazy"/>
+                ) : (
+                  <div className="photo-fallback">Foto yakında / Фото скоро</div>
+                )}
+              </div>
+              <div className="actions">
+                <button onClick={() => handleSelect(p.code)} className="btn btn-primary">Seç / Выбрать</button>
+              </div>
             </div>
-            <button onClick={() => handleSelect(p.code)} style={{ marginTop: 10, width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: '#2ea6ff', color: 'white', fontWeight: 600 }}>
-              Seç / Выбрать
-            </button>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      <div style={{ marginTop: 18, textAlign: 'center' }}>
-        <button onClick={handleClose} style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #ccc', background: 'white' }}>
-          Sohbete dön / Вернуться в чат
-        </button>
+      <div className="footer">
+        <button onClick={handleClose} className="btn btn-ghost">Sohbete dön / Вернуться в чат</button>
       </div>
     </div>
   )
