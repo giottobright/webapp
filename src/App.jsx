@@ -4,16 +4,26 @@ import { PERSONAS } from './personas'
 // Vite will bundle static photos from /photo using import.meta.glob
 const PHOTO_GLOB = import.meta && import.meta.glob ? import.meta.glob('../photo/*.{png,jpg,jpeg,webp,avif}', { eager: true }) : {}
 
+// Optional: external S3/HTTP base for photos. If set, files are taken from there
+// Expected naming in bucket: elif.png, zeynep.png, melis.png, derya.png, irem.png, ayse.png, eylul.png, leyla.png
+const ASSETS_BASE = (import.meta && import.meta.env && import.meta.env.VITE_ASSETS_BASE) ? String(import.meta.env.VITE_ASSETS_BASE).replace(/\/$/, '') : ''
+
 function getPhotoSrcByCode(code) {
-  // Expect filenames like: elif.jpg, zeynep.webp, etc.
+  const normalized = String(code).toLowerCase()
+
+  // If external base URL is provided, construct URL directly
+  if (ASSETS_BASE) {
+    return `${ASSETS_BASE}/${normalized}.png`
+  }
+
+  // Else use bundled static assets
   const entry = Object.entries(PHOTO_GLOB).find(([path]) => {
     const file = path.split('/').pop() || ''
     const base = file.replace(/\.(png|jpg|jpeg|webp|avif)$/i, '')
-    return base.toLowerCase() === String(code).toLowerCase()
+    return base.toLowerCase() === normalized
   })
   if (!entry) return null
   const mod = entry[1]
-  // Vite glob eager returns either { default: url } or just url depending on asset type
   return (mod && mod.default) ? mod.default : mod
 }
 
