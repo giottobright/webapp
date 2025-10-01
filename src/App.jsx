@@ -65,7 +65,7 @@ export default function App() {
         <h2 className="title">Kızını seç ve sohbet et / Выбери девушку и общайся</h2>
         <p className="subtitle">
           Tüm yanıtlar önce Türkçe, sonra aynı mesajda Rusça kopyalanır. <br/>
-          Все ответы сначала на турецком, затем дублируются на русском.
+          Все ответ сначала на турецком, затем дублируются на русском.
         </p>
       </header>
 
