@@ -5,26 +5,36 @@ import { PERSONAS } from './personas'
 const PHOTO_GLOB = import.meta && import.meta.glob ? import.meta.glob('../photo/*.{png,jpg,jpeg,webp,avif}', { eager: true }) : {}
 
 // Optional: external S3/HTTP base for photos. If set, files are taken from there
-// Expected naming in bucket: elif.png, zeynep.png, melis.png, derya.png, irem.png, ayse.png, eylul.png, leyla.png
+// Expected naming in bucket now: elif1.png, elif2.png, elif3.png (we will show *3)
 const ASSETS_BASE = (import.meta && import.meta.env && import.meta.env.VITE_ASSETS_BASE) ? String(import.meta.env.VITE_ASSETS_BASE).replace(/\/$/, '') : ''
 
 function getPhotoSrcByCode(code) {
   const normalized = String(code).toLowerCase()
 
-  // If external base URL is provided, construct URL directly
+  // If external base URL is provided, construct URL for *3 photo
   if (ASSETS_BASE) {
-    return `${ASSETS_BASE}/${normalized}.png`
+    return `${ASSETS_BASE}/${normalized}3.png`
   }
 
-  // Else use bundled static assets
-  const entry = Object.entries(PHOTO_GLOB).find(([path]) => {
-    const file = path.split('/').pop() || ''
-    const base = file.replace(/\.(png|jpg|jpeg|webp|avif)$/i, '')
-    return base.toLowerCase() === normalized
-  })
-  if (!entry) return null
-  const mod = entry[1]
-  return (mod && mod.default) ? mod.default : mod
+  // Else use bundled static assets, prefer *3
+  const entries = Object.entries(PHOTO_GLOB)
+  const findByBase = (baseName) => {
+    const entry = entries.find(([path]) => {
+      const file = path.split('/').pop() || ''
+      const base = file.replace(/\.(png|jpg|jpeg|webp|avif)$/i, '')
+      return base.toLowerCase() === baseName.toLowerCase()
+    })
+    if (!entry) return null
+    const mod = entry[1]
+    return (mod && mod.default) ? mod.default : mod
+  }
+
+  // Try code3 first, then fallback to code2, code1
+  return (
+    findByBase(`${normalized}3`) ||
+    findByBase(`${normalized}2`) ||
+    findByBase(`${normalized}1`)
+  )
 }
 
 function getTg() {
