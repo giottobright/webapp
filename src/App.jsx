@@ -5,18 +5,11 @@ import { PERSONAS } from './personas'
 const PHOTO_GLOB = import.meta && import.meta.glob ? import.meta.glob('../photo/*.{png,jpg,jpeg,webp,avif}', { eager: true }) : {}
 
 // Optional: external S3/HTTP base for photos. If set, files are taken from there
-// Expected naming in bucket now: elif1.png, elif2.png, elif3.png (we will show *3)
+// Expected naming in bucket now: elif1.png, elif2.png, elif3.png
 const ASSETS_BASE = (import.meta && import.meta.env && import.meta.env.VITE_ASSETS_BASE) ? String(import.meta.env.VITE_ASSETS_BASE).replace(/\/$/, '') : ''
 
-function getPhotoSrcByCode(code) {
+function buildLocalCandidates(code) {
   const normalized = String(code).toLowerCase()
-
-  // If external base URL is provided, construct URL for *3 photo
-  if (ASSETS_BASE) {
-    return `${ASSETS_BASE}/${normalized}3.png`
-  }
-
-  // Else use bundled static assets, prefer *3
   const entries = Object.entries(PHOTO_GLOB)
   const findByBase = (baseName) => {
     const entry = entries.find(([path]) => {
@@ -28,12 +21,46 @@ function getPhotoSrcByCode(code) {
     const mod = entry[1]
     return (mod && mod.default) ? mod.default : mod
   }
+  return [
+    findByBase(`${normalized}3`),
+    findByBase(`${normalized}2`),
+    findByBase(`${normalized}1`),
+  ].filter(Boolean)
+}
 
-  // Try code3 first, then fallback to code2, code1
+function buildExternalCandidates(code) {
+  const normalized = String(code).toLowerCase()
+  if (!ASSETS_BASE) return []
+  return [
+    `${ASSETS_BASE}/${normalized}3.png`,
+    `${ASSETS_BASE}/${normalized}2.png`,
+    `${ASSETS_BASE}/${normalized}1.png`,
+  ]
+}
+
+function SmartImage({ code, alt }) {
+  const sources = useMemo(() => {
+    return [...buildExternalCandidates(code), ...buildLocalCandidates(code)]
+  }, [code])
+
+  const [idx, setIdx] = React.useState(0)
+  const src = sources[idx] || ''
+
+  React.useEffect(() => {
+    setIdx(0)
+  }, [code])
+
+  if (!sources.length) {
+    return <div className="photo-fallback">Foto yakında / Фото скоро</div>
+  }
+
   return (
-    findByBase(`${normalized}3`) ||
-    findByBase(`${normalized}2`) ||
-    findByBase(`${normalized}1`)
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setIdx((i) => (i + 1 < sources.length ? i + 1 : i))}
+    />
   )
 }
 
@@ -80,26 +107,19 @@ export default function App() {
       </header>
 
       <div className="grid">
-        {PERSONAS.map(p => {
-          const src = getPhotoSrcByCode(p.code)
-          return (
-            <div key={p.code} className="card">
-              <div className="badge">{p.code}</div>
-              <div className="card-title">{p.name_tr} / {p.name_ru}</div>
-              <div className="card-tagline">{p.tagline_tr} — {p.tagline_ru}</div>
-              <div className="photo">
-                {src ? (
-                  <img src={src} alt={`${p.name_tr} / ${p.name_ru}`} loading="lazy"/>
-                ) : (
-                  <div className="photo-fallback">Foto yakında / Фото скоро</div>
-                )}
-              </div>
-              <div className="actions">
-                <button onClick={() => handleSelect(p.code)} className="btn btn-primary">Seç / Выбрать</button>
-              </div>
+        {PERSONAS.map(p => (
+          <div key={p.code} className="card">
+            <div className="badge">{p.code}</div>
+            <div className="card-title">{p.name_tr} / {p.name_ru}</div>
+            <div className="card-tagline">{p.tagline_tr} — {p.tagline_ru}</div>
+            <div className="photo">
+              <SmartImage code={p.code} alt={`${p.name_tr} / ${p.name_ru}`} />
             </div>
-          )
-        })}
+            <div className="actions">
+              <button onClick={() => handleSelect(p.code)} className="btn btn-primary">Seç / Выбрать</button>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="footer">
