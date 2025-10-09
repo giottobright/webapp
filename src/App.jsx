@@ -5,7 +5,7 @@ import { PERSONAS } from './personas'
 const PHOTO_GLOB = import.meta && import.meta.glob ? import.meta.glob('../photo/*.{png,jpg,jpeg,webp,avif}', { eager: true }) : {}
 
 // Optional: external S3/HTTP base for photos. If set, files are taken from there
-// Expected naming in bucket now: elif1.png, elif2.png, elif3.png
+// Expected naming in bucket now: elif1.png (primary), elif2.png, elif3.png
 const ASSETS_BASE = (import.meta && import.meta.env && import.meta.env.VITE_ASSETS_BASE) ? String(import.meta.env.VITE_ASSETS_BASE).replace(/\/$/, '') : ''
 
 function buildLocalCandidates(code) {
@@ -21,20 +21,22 @@ function buildLocalCandidates(code) {
     const mod = entry[1]
     return (mod && mod.default) ? mod.default : mod
   }
+  // Prefer the primary (1) image first, then fallbacks (2, 3)
   return [
-    findByBase(`${normalized}3`),
-    findByBase(`${normalized}2`),
     findByBase(`${normalized}1`),
+    findByBase(`${normalized}2`),
+    findByBase(`${normalized}3`),
   ].filter(Boolean)
 }
 
 function buildExternalCandidates(code) {
   const normalized = String(code).toLowerCase()
   if (!ASSETS_BASE) return []
+  // Prefer the primary (1) image first, then fallbacks (2, 3)
   return [
-    `${ASSETS_BASE}/${normalized}3.png`,
-    `${ASSETS_BASE}/${normalized}2.png`,
     `${ASSETS_BASE}/${normalized}1.png`,
+    `${ASSETS_BASE}/${normalized}2.png`,
+    `${ASSETS_BASE}/${normalized}3.png`,
   ]
 }
 
