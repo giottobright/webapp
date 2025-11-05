@@ -175,17 +175,28 @@ export default function App() {
   const lang = navigator.language?.startsWith('ru') ? 'ru' : 'tr'
 
   React.useEffect(() => {
-    const t = getTg()
-    if (t) {
-      t.ready()
-      try { t.expand() } catch (_) {}
-      try { t.MainButton.hide() } catch (_) {}
-      // Set theme colors
-      try {
-        t.setHeaderColor('#000000')
-        t.setBackgroundColor('#000000')
-      } catch (_) {}
+    // Wait a bit for Telegram WebApp to be fully initialized
+    const initTelegram = () => {
+      const t = getTg()
+      if (t) {
+        t.ready()
+        try { t.expand() } catch (_) {}
+        try { t.MainButton.hide() } catch (_) {}
+        // Set theme colors
+        try {
+          t.setHeaderColor('#000000')
+          t.setBackgroundColor('#000000')
+        } catch (_) {}
+      }
     }
+    
+    // Try immediately
+    initTelegram()
+    
+    // Also try after a short delay in case script loaded late
+    const timeout = setTimeout(initTelegram, 100)
+    
+    return () => clearTimeout(timeout)
   }, [])
 
   const handleSelect = (code) => {
