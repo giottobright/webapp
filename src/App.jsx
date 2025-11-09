@@ -8,8 +8,57 @@ const PHOTO_GLOB = import.meta && import.meta.glob ? import.meta.glob('../photo/
 // Expected naming in bucket now: elif1.png (primary), elif2.png, elif3.png
 const ASSETS_BASE = (import.meta && import.meta.env && import.meta.env.VITE_ASSETS_BASE) ? String(import.meta.env.VITE_ASSETS_BASE).replace(/\/$/, '') : ''
 
-// API base URL
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+// API base URL - smart detection
+function getApiBase() {
+  // 1. Try from environment variable first (explicit configuration)
+  if (import.meta.env.VITE_API_BASE) {
+    const base = import.meta.env.VITE_API_BASE.trim()
+    if (base) {
+      return base.replace(/\/$/, '')
+    }
+  }
+  
+  // 2. Try to detect from current location
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin
+    const hostname = window.location.hostname
+    
+    // Development: use localhost
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8000'
+    }
+    
+    // Production: try different strategies
+    // Strategy 1: Same origin (if backend is proxied through same domain)
+    // Strategy 2: Try to construct backend URL from webapp URL
+    
+    // If webapp is on subdomain like webapp.hayalkiz.com, try api.hayalkiz.com
+    if (hostname.includes('webapp') || hostname.includes('mini-app') || hostname.includes('app')) {
+      const baseDomain = hostname.replace(/^(webapp|mini-app|app)\.?/, '')
+      if (baseDomain) {
+        // Try api subdomain
+        const apiUrl = `https://api.${baseDomain}`
+        console.log('🔗 Trying API subdomain:', apiUrl)
+        return apiUrl
+      }
+    }
+    
+    // Strategy 3: Use same origin (backend handles /api routes)
+    // This works if nginx/proxy routes /api/* to backend
+    return origin
+  }
+  
+  // Final fallback
+  return 'http://localhost:8000'
+}
+
+const API_BASE = getApiBase()
+
+// Log API base for debugging
+if (typeof window !== 'undefined') {
+  console.log('🔗 API Base URL:', API_BASE)
+  console.log('📍 Current origin:', window.location.origin)
+}
 
 function buildLocalCandidates(code) {
   const normalized = String(code).toLowerCase()
@@ -251,14 +300,61 @@ function GiftShop({ persona, onClose, onBack }) {
 
   const loadGifts = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/gifts?language=${lang}`)
+      console.log('Loading gifts from:', `${API_BASE}/api/gifts?language=${lang}`)
+      
+      const response = await fetch(`${API_BASE}/api/gifts?language=${lang}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      console.log('Response status:', response.status, response.ok)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
+      console.log('Gifts data received:', data)
+      
       if (data.ok) {
-        setGifts(data.gifts || [])
-        setCategories(data.categories || [])
+        const giftsList = data.gifts || []
+        const categoriesList = data.categories || []
+        console.log(`Loaded ${giftsList.length} gifts and ${categoriesList.length} categories`)
+        setGifts(giftsList)
+        setCategories(categoriesList)
+        
+        if (giftsList.length === 0) {
+          console.warn('⚠️ No gifts found in database. Make sure migration 006_gift_shop_system.sql is applied.')
+        }
+      } else {
+        console.error('API returned error:', data.error)
+        // Still set empty arrays to show empty state
+        setGifts([])
+        setCategories([])
       }
     } catch (error) {
       console.error('Failed to load gifts:', error)
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        apiBase: API_BASE,
+        url: `${API_BASE}/api/gifts?language=${lang}`
+      })
+      
+      // Set empty arrays on error so UI shows empty state
+      setGifts([])
+      setCategories([])
+      
+      // Show user-friendly error in console for debugging
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        console.error('🌐 Network error - возможно проблема с CORS или неправильный API URL')
+        console.error('💡 Проверьте:')
+        console.error('   1. Правильно ли настроен VITE_API_BASE в .env')
+        console.error('   2. Доступен ли backend по адресу:', API_BASE)
+        console.error('   3. Настроен ли CORS на backend для этого домена')
+      }
     } finally {
       setLoading(false)
     }
@@ -446,7 +542,24 @@ function GiftShop({ persona, onClose, onBack }) {
             ))
           ) : (
             <div className="shop-empty">
-              <p>{lang === 'ru' ? 'Нет подарков в этой категории' : 'Bu kategoride hediye yok'}</p>
+              {gifts.length === 0 ? (
+                <>
+                  <p style={{ fontSize: '18px', marginBottom: '8px' }}>📦</p>
+                  <p style={{ fontWeight: 600, marginBottom: '4px' }}>
+                    {lang === 'ru' ? 'Магазин пуст' : 'Mağaza boş'}
+                  </p>
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                    {lang === 'ru' 
+                      ? 'Подарки загружаются или их нет в базе данных' 
+                      : 'Hediyeler yükleniyor veya veritabanında yok'}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px' }}>
+                    API: {API_BASE}/api/gifts
+                  </p>
+                </>
+              ) : (
+                <p>{lang === 'ru' ? 'Нет подарков в этой категории' : 'Bu kategoride hediye yok'}</p>
+              )}
             </div>
           )}
         </div>
