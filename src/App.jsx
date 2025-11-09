@@ -263,6 +263,9 @@ function GiftShop({ persona, onClose, onBack }) {
       setLoading(false)
     }
   }
+  
+  // If persona is 'all', don't filter by persona in purchase
+  const isAllPersonas = persona?.code === 'all'
 
   const handlePurchase = async (gift) => {
     const t = getTg()
@@ -276,13 +279,16 @@ function GiftShop({ persona, onClose, onBack }) {
       // Get user ID from Telegram
       const userId = t?.initDataUnsafe?.user?.id || 'test_user'
       
+      // If no specific persona, use first persona or 'all'
+      const personaCode = isAllPersonas ? 'all' : persona.code
+      
       const response = await fetch(`${API_BASE}/api/gifts/purchase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
           gift_code: gift.code,
-          persona: persona.code,
+          persona: personaCode,
           context_type: 'shop'
         })
       })
@@ -295,9 +301,13 @@ function GiftShop({ persona, onClose, onBack }) {
           try { t.HapticFeedback.notificationOccurred('success') } catch (_) {}
         }
         
+        const personaName = isAllPersonas 
+          ? (lang === 'ru' ? 'девушкам' : 'kızlara')
+          : (lang === 'ru' ? persona.name_ru : persona.name_tr)
+        
         const successMsg = lang === 'ru' 
-          ? `✅ ${gift.emoji} ${gift.name} подарено ${lang === 'ru' ? persona.name_ru : persona.name_tr}!`
-          : `✅ ${gift.emoji} ${gift.name}, ${lang === 'ru' ? persona.name_ru : persona.name_tr}'e hediye edildi!`
+          ? `✅ ${gift.emoji} ${gift.name} подарено ${personaName}!`
+          : `✅ ${gift.emoji} ${gift.name}, ${personaName}'e hediye edildi!`
         
         if (t && t.showAlert) {
           t.showAlert(successMsg)
@@ -343,25 +353,32 @@ function GiftShop({ persona, onClose, onBack }) {
     ? gifts.filter(g => g.category === selectedCategory)
     : gifts
 
-  const personaName = lang === 'ru' ? persona.name_ru : persona.name_tr
+  const personaName = isAllPersonas 
+    ? (lang === 'ru' ? 'Все девушки' : 'Tüm kızlar')
+    : (lang === 'ru' ? persona.name_ru : persona.name_tr)
 
   return (
     <div className="shop-overlay" onClick={handleClose}>
       <div className="shop-content" onClick={(e) => e.stopPropagation()}>
         <div className="shop-header">
-          <button className="back-btn" onClick={handleBackClick}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-          </button>
+          {!isAllPersonas && (
+            <button className="back-btn" onClick={handleBackClick}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+            </button>
+          )}
+          {isAllPersonas && <div style={{ width: '40px' }}></div>}
           <div className="shop-title-section">
             <h2 className="shop-title">
               {lang === 'ru' ? '🎁 Магазин подарков' : '🎁 Hediye Dükkanı'}
             </h2>
-            <p className="shop-subtitle">
-              {lang === 'ru' ? `для ${personaName}` : `${personaName} için`}
-            </p>
+            {!isAllPersonas && (
+              <p className="shop-subtitle">
+                {lang === 'ru' ? `для ${personaName}` : `${personaName} için`}
+              </p>
+            )}
           </div>
           <button className="close-btn" onClick={handleClose}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -514,7 +531,26 @@ export default function App() {
   }
 
   const handleBackToDetail = () => {
-    setView('detail')
+    if (selectedPersona) {
+      setView('detail')
+    } else {
+      setView('list')
+    }
+  }
+  
+  const handleOpenShopFromDetail = (persona) => {
+    setShopPersona(persona)
+    setView('shop')
+  }
+
+  const handleOpenShopFromMain = () => {
+    const t = getTg()
+    if (t) {
+      try { t.HapticFeedback.impactOccurred('light') } catch (_) {}
+    }
+    // Open shop without specific persona (show all gifts)
+    setShopPersona({ code: 'all', name_ru: 'Все девушки', name_tr: 'Tüm kızlar' })
+    setView('shop')
   }
 
   return (
@@ -530,6 +566,15 @@ export default function App() {
                 ? 'Выбери девушку и начни увлекательное общение' 
                 : 'Bir kız seç ve heyecanlı sohbete başla'}
             </p>
+            
+            <button className="shop-button-main" onClick={handleOpenShopFromMain}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <path d="M16 10a4 4 0 0 1-8 0"></path>
+              </svg>
+              <span>{lang === 'ru' ? '🎁 Магазин подарков' : '🎁 Hediye Dükkanı'}</span>
+            </button>
           </header>
 
           <div className="grid">
@@ -549,7 +594,7 @@ export default function App() {
           persona={selectedPersona}
           onClose={handleCloseDetail}
           onSelect={() => handleSelect(selectedPersona.code)}
-          onOpenShop={handleOpenShop}
+          onOpenShop={handleOpenShopFromDetail}
         />
       )}
 
@@ -563,3 +608,4 @@ export default function App() {
     </div>
   )
 }
+
