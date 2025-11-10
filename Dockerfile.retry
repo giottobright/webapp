@@ -1,0 +1,55 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /opt/build
+
+# Установка git и необходимых инструментов
+RUN apk add --no-cache git curl bash
+
+# Скрипт для надежного клонирования с retry
+RUN echo '#!/bin/sh' > /clone.sh && \
+    echo 'set -e' >> /clone.sh && \
+    echo 'for i in 1 2 3 4 5; do' >> /clone.sh && \
+    echo '  echo "Clone attempt $i..."' >> /clone.sh && \
+    echo '  git config --global http.postBuffer 524288000' >> /clone.sh && \
+    echo '  git config --global http.lowSpeedLimit 0' >> /clone.sh && \
+    echo '  git config --global http.lowSpeedTime 0' >> /clone.sh && \
+    echo '  git config --global http.timeout 600' >> /clone.sh && \
+    echo '  git config --global http.sslVerify true' >> /clone.sh && \
+    echo '  if git clone --depth 1 --branch master --single-branch https://github.com/giottobright/webapp.git /opt/build; then' >> /clone.sh && \
+    echo '    echo "Clone successful!"' >> /clone.sh && \
+    echo '    exit 0' >> /clone.sh && \
+    echo '  else' >> /clone.sh && \
+    echo '    echo "Clone failed, waiting 10 seconds..."' >> /clone.sh && \
+    echo '    sleep 10' >> /clone.sh && \
+    echo '    rm -rf /opt/build' >> /clone.sh && \
+    echo '  fi' >> /clone.sh && \
+    echo 'done' >> /clone.sh && \
+    echo 'echo "All clone attempts failed"' >> /clone.sh && \
+    echo 'exit 1' >> /clone.sh && \
+    chmod +x /clone.sh
+
+# Выполнение клонирования
+RUN /clone.sh
+
+# Удаление origin
+RUN cd /opt/build && git remote rm origin || true
+
+# Установка зависимостей
+RUN cd /opt/build && npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+# Сборка
+RUN cd /opt/build && npm run build
+
+# Production stage
+FROM nginx:alpine
+
+COPY --from=builder /opt/build/dist /usr/share/nginx/html
+COPY nginx-timeweb.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
+
