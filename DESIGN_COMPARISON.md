@@ -374,3 +374,4 @@ t.HapticFeedback.notificationOccurred('success')
 *Документация создана с ❤️ и вниманием к деталям*
 *Последнее обновление: 2025*
 
+

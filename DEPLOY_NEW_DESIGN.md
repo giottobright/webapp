@@ -240,3 +240,4 @@ async def handle_webapp_data(data: dict):
 
 *Если возникли вопросы - проверьте README_NEW_DESIGN.md или откройте issue*
 
+
