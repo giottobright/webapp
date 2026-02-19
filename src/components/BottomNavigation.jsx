@@ -6,8 +6,8 @@ export default function BottomNavigation({ activeTab, onTabChange }) {
   const tabs = [
     { id: 'girls', icon: '👥', label: lang === 'ru' ? 'Девушки' : 'Kızlar' },
     { id: 'shop', icon: '🎁', label: lang === 'ru' ? 'Магазин' : 'Mağaza' },
-    { id: 'mygifts', icon: '💝', label: lang === 'ru' ? 'Мои' : 'Hediye' },
     { id: 'referrals', icon: '🔗', label: lang === 'ru' ? 'Друзья' : 'Davet' },
+    { id: 'profile', icon: '👤', label: lang === 'ru' ? 'Профиль' : 'Profil' },
     { id: 'premium', icon: '⭐', label: 'VIP' },
   ]
 

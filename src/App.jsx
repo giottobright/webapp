@@ -8,6 +8,7 @@ import GiftShop from './components/GiftShop'
 import MyGifts from './components/MyGifts'
 import PremiumPage from './components/PremiumPage'
 import ReferralsPage from './components/ReferralsPage'
+import ProfilePage from './components/ProfilePage'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('girls')
@@ -116,6 +117,11 @@ export default function App() {
         {activeTab === 'referrals' && (
           <div key={`referrals-${pageKey}`} className="page-enter">
             <ReferralsPage />
+          </div>
+        )}
+        {activeTab === 'profile' && (
+          <div key={`profile-${pageKey}`} className="page-enter">
+            <ProfilePage />
           </div>
         )}
       </div>
