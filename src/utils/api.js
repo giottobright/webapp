@@ -41,6 +41,44 @@ export function getTg() {
   return window.Telegram?.WebApp ?? null
 }
 
+export function getUserId() {
+  const tg = getTg()
+
+  const fromUnsafe = tg?.initDataUnsafe?.user?.id
+  if (fromUnsafe) return String(fromUnsafe)
+
+  // Fallback: parse initData manually (URL-encoded string with user=<json>)
+  const raw = tg?.initData
+  if (raw) {
+    try {
+      const params = new URLSearchParams(raw)
+      const userJson = params.get('user')
+      if (userJson) {
+        const parsed = JSON.parse(userJson)
+        if (parsed?.id) return String(parsed.id)
+      }
+    } catch (_) {}
+  }
+
+  // Fallback: URL query params (?user_id=xxx)
+  if (typeof window !== 'undefined') {
+    const urlId = new URLSearchParams(window.location.search).get('user_id')
+    if (urlId) return urlId
+    // Hash fragment fallback
+    try {
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'))
+      const userJson = hashParams.get('user')
+      if (userJson) {
+        const parsed = JSON.parse(userJson)
+        if (parsed?.id) return String(parsed.id)
+      }
+    } catch (_) {}
+  }
+
+  console.warn('⚠️ getUserId: could not extract user ID from Telegram WebApp')
+  return null
+}
+
 export function getLang() {
   return navigator.language?.startsWith('ru') ? 'ru' : 'tr'
 }

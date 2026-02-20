@@ -1,29 +1,50 @@
 import React, { useState, useEffect } from 'react'
-import { API_BASE, getTg, getLang } from '../utils/api'
+import { API_BASE, getTg, getUserId, getLang } from '../utils/api'
 
 export default function ProfilePage() {
   const lang = getLang()
   const tg = getTg()
-  const userId = tg?.initDataUnsafe?.user?.id
+  const userId = getUserId()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState('')
   const [age, setAge] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return }
-    fetch(`${API_BASE}/api/profile/${userId}`)
-      .then(r => r.json())
+    if (!userId) {
+      console.warn('ProfilePage: no userId available', {
+        tg: !!tg,
+        initData: tg?.initData?.substring(0, 50),
+        initDataUnsafe: tg?.initDataUnsafe,
+      })
+      setError(lang === 'ru' ? 'Не удалось определить пользователя' : 'Kullanıcı belirlenemedi')
+      setLoading(false)
+      return
+    }
+    const url = `${API_BASE}/api/profile/${userId}`
+    console.log('ProfilePage: fetching', url)
+    fetch(url)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then(data => {
         if (data.ok) {
           setProfile(data.profile)
           setName(data.profile.name || '')
           setAge(data.profile.age || '')
+        } else {
+          console.error('ProfilePage: API returned ok=false', data)
+          setError(data.error || (lang === 'ru' ? 'Ошибка загрузки' : 'Yükleme hatası'))
         }
       })
-      .catch(() => {})
+      .catch(err => {
+        console.error('ProfilePage: fetch failed', err)
+        setError(lang === 'ru' ? 'Ошибка подключения к серверу' : 'Sunucuya bağlanılamadı')
+      })
       .finally(() => setLoading(false))
   }, [userId])
 
@@ -34,7 +55,9 @@ export default function ProfilePage() {
       const body = {}
       if (name.trim()) body.name = name.trim()
       if (age && parseInt(age) >= 13) body.age = parseInt(age)
-      await fetch(`${API_BASE}/api/profile/${userId}`, {
+      const saveId = userId || getUserId()
+      if (!saveId) return
+      await fetch(`${API_BASE}/api/profile/${saveId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -61,6 +84,14 @@ export default function ProfilePage() {
       <div className="profile-page page-enter">
         <div className="profile-header-block">
           <h2>{lang === 'ru' ? 'Профиль недоступен' : 'Profil bulunamadı'}</h2>
+          {error && <p style={{ color: '#999', fontSize: '0.85rem', marginTop: 8 }}>{error}</p>}
+          {!userId && (
+            <p style={{ color: '#777', fontSize: '0.8rem', marginTop: 8 }}>
+              {lang === 'ru'
+                ? 'Откройте приложение через Telegram бота'
+                : 'Uygulamayı Telegram botu üzerinden açın'}
+            </p>
+          )}
         </div>
       </div>
     )
