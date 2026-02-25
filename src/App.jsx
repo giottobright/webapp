@@ -24,7 +24,7 @@ export default function App() {
         t.ready()
         try { t.expand() } catch (_) {}
         try { t.MainButton.hide() } catch (_) {}
-        try { t.setHeaderColor('#000000'); t.setBackgroundColor('#000000') } catch (_) {}
+        try { t.setHeaderColor('#07060F'); t.setBackgroundColor('#07060F') } catch (_) {}
         try { t.disableVerticalSwipes() } catch (_) {}
       }
     }
