@@ -7,6 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 HayalKız webapp — React 18 + Vite Telegram Mini App: persona catalog, gift shop, subscriptions (Telegram Stars),
 referrals, profile. UI languages ru/tr/en.
 
+Backend, project status and decisions live in the private `back` repo: `back/docs/PROJECT_STATUS.md`,
+`back/docs/ARCHITECTURE.md` (Mini App auth and payment flows are in §4–5). Deliver changes via branches + PRs to `master`.
+
 ## Commands
 
 ```bash
