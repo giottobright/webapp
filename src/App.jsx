@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { PERSONAS } from './personas'
-import { apiFetch, getLang, getStartParams, getTg, haptic, insideTelegram, showAlert } from './utils/api'
+import { apiFetch, getLang, getStartParams, getTg, haptic, insideTelegram, showAlert, tgSupports } from './utils/api'
 import { localizePersona, t } from './i18n'
 import BottomNavigation from './components/BottomNavigation'
 import PersonaCard from './components/PersonaCard'
@@ -11,6 +11,7 @@ import ReferralsPage from './components/ReferralsPage'
 import ProfilePage from './components/ProfilePage'
 
 const TABS = ['girls', 'shop', 'referrals', 'profile', 'premium']
+const CHROME_COLOR = '#09070F'
 
 export default function App() {
   const lang = getLang()
@@ -24,12 +25,16 @@ export default function App() {
   const personas = useMemo(() => personaCatalog.map((p) => localizePersona(p, lang)), [personaCatalog, lang])
 
   useEffect(() => {
+    document.documentElement.lang = lang
     const tg = getTg()
     if (tg) {
       try { tg.ready() } catch (_) {}
       try { tg.expand() } catch (_) {}
-      try { tg.setHeaderColor('#07060F'); tg.setBackgroundColor('#07060F') } catch (_) {}
-      try { tg.disableVerticalSwipes() } catch (_) {}
+      if (tgSupports('6.1')) {
+        try { tg.setHeaderColor(CHROME_COLOR); tg.setBackgroundColor(CHROME_COLOR) } catch (_) {}
+      }
+      if (tgSupports('7.10')) { try { tg.setBottomBarColor(CHROME_COLOR) } catch (_) {} }
+      if (tgSupports('7.7')) { try { tg.disableVerticalSwipes() } catch (_) {} }
     }
     const controller = new AbortController()
     apiFetch('/api/personas', { signal: controller.signal })
@@ -38,7 +43,7 @@ export default function App() {
       })
       .catch(() => {})
     return () => controller.abort()
-  }, [])
+  }, [lang])
 
   const handleSelect = useCallback(async (code) => {
     const tg = getTg()
@@ -66,74 +71,79 @@ export default function App() {
     setSelectedPersona(persona)
   }, [])
 
+  const goTo = useCallback((tab) => {
+    setActiveTab(tab)
+    setPageKey((k) => k + 1)
+    try { window.scrollTo({ top: 0 }) } catch (_) {}
+  }, [])
+
   const handleOpenShop = useCallback((persona) => {
     setSelectedPersona(null)
     setShopPersonaCode(persona?.code || null)
-    setActiveTab('shop')
-    setPageKey((k) => k + 1)
-  }, [])
+    goTo('shop')
+  }, [goTo])
 
   const handleTabChange = useCallback((tab) => {
-    haptic('light')
-    setActiveTab(tab)
-    setPageKey((k) => k + 1)
+    haptic('selection')
     if (tab === 'shop') setShopPersonaCode(null)
-  }, [])
+    goTo(tab)
+  }, [goTo])
 
   const shopPersona = personas.find((p) => p.code === shopPersonaCode) || null
 
   return (
     <div className="app">
-      <div className="app-content">
+      <main className="app-content">
         {activeTab === 'girls' && (
-          <div key={`girls-${pageKey}`} className="page-enter">
-            <header className="header">
-              <div className="header-brand">
-                <h1 className="title">{t(lang, 'girls.title')}</h1>
-                <div className="header-badge">
-                  <span className="header-badge-dot"></span>
+          <div key={`girls-${pageKey}`} className="page page-enter">
+            <header className="page-header">
+              <div className="brand-row">
+                <span className="brand">Hayal<em>Kız</em></span>
+                <span className="online-badge">
+                  <span className="online-dot" aria-hidden="true" />
                   {t(lang, 'girls.online', { count: personas.length })}
-                </div>
+                </span>
               </div>
-              <p className="subtitle">{t(lang, 'girls.subtitle')}</p>
+              <h1 className="page-title">{t(lang, 'girls.title')}</h1>
+              <p className="page-subtitle">{t(lang, 'girls.subtitle')}</p>
             </header>
-            <div className="grid">
-              {personas.map((p) => (
-                <PersonaCard key={p.code} persona={p} lang={lang} onClick={() => handleCardClick(p)} />
+            <div className="persona-grid">
+              {personas.map((p, i) => (
+                <PersonaCard key={p.code} persona={p} lang={lang} index={i} onClick={() => handleCardClick(p)} />
               ))}
             </div>
-            {selectedPersona && (
-              <PersonaDetail
-                persona={selectedPersona}
-                lang={lang}
-                onClose={() => setSelectedPersona(null)}
-                onSelect={() => handleSelect(selectedPersona.code)}
-                onOpenShop={handleOpenShop}
-              />
-            )}
           </div>
         )}
         {activeTab === 'shop' && (
-          <div key={`shop-${pageKey}`} className="page-enter">
+          <div key={`shop-${pageKey}`} className="page page-enter">
             <GiftShop persona={shopPersona} personas={personas} lang={lang} />
           </div>
         )}
         {activeTab === 'premium' && (
-          <div key={`premium-${pageKey}`} className="page-enter">
+          <div key={`premium-${pageKey}`} className="page page-enter">
             <PremiumPage lang={lang} />
           </div>
         )}
         {activeTab === 'referrals' && (
-          <div key={`referrals-${pageKey}`} className="page-enter">
+          <div key={`referrals-${pageKey}`} className="page page-enter">
             <ReferralsPage lang={lang} />
           </div>
         )}
         {activeTab === 'profile' && (
-          <div key={`profile-${pageKey}`} className="page-enter">
-            <ProfilePage lang={lang} />
+          <div key={`profile-${pageKey}`} className="page page-enter">
+            <ProfilePage lang={lang} personas={personas} onUpgrade={() => handleTabChange('premium')} />
           </div>
         )}
-      </div>
+      </main>
+      {selectedPersona && (
+        <PersonaDetail
+          persona={selectedPersona}
+          lang={lang}
+          onClose={() => setSelectedPersona(null)}
+          onSelect={() => handleSelect(selectedPersona.code)}
+          onOpenShop={handleOpenShop}
+        />
+      )}
       <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} lang={lang} />
     </div>
   )

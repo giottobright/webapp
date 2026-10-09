@@ -1,11 +1,6 @@
 import React from 'react'
 import { getLang } from '../utils/api'
-
-const TEXT = {
-  ru: ['Что-то пошло не так', 'Обнови приложение'],
-  tr: ['Bir şeyler ters gitti', 'Uygulamayı yeniden aç'],
-  en: ['Something went wrong', 'Please reopen the app'],
-}
+import { t } from '../i18n'
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -23,13 +18,17 @@ export default class ErrorBoundary extends React.Component {
 
   render() {
     if (!this.state.failed) return this.props.children
-    const [title, hint] = TEXT[getLang()] || TEXT.en
+    const lang = getLang()
     return (
-      <div style={{ padding: 24, textAlign: 'center', color: '#F2EEFF' }}>
-        <h2>{title}</h2>
-        <p style={{ opacity: 0.7 }}>{hint}</p>
-        <button className="profile-btn profile-btn-edit" onClick={() => window.location.reload()}>↻</button>
-      </div>
+      <main className="app">
+        <div className="state state-screen" role="alert">
+          <h1 className="state-title">{t(lang, 'common.crashed')}</h1>
+          <p className="state-text">{t(lang, 'common.crashedHint')}</p>
+          <button type="button" className="btn btn-primary btn-md" onClick={() => window.location.reload()}>
+            {t(lang, 'common.reload')}
+          </button>
+        </div>
+      </main>
     )
   }
 }

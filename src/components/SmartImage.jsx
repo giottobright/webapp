@@ -1,27 +1,51 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { buildExternalCandidates, buildLocalCandidates, getLang } from '../utils/api'
 import { t } from '../i18n'
 
-export default function SmartImage({ code, alt, className = '' }) {
-  // Bundled WebP first (fast, cached with the app), external originals as a fallback
-  const sources = useMemo(() => [...buildLocalCandidates(code), ...buildExternalCandidates(code)], [code])
+/** Persona photo: bundled WebP first, external originals as a fallback; fades in once decoded. */
+export default function SmartImage({ code, alt, className = '', src: fixedSrc, eager = false }) {
+  const sources = useMemo(
+    () => (fixedSrc ? [fixedSrc] : [...buildLocalCandidates(code), ...buildExternalCandidates(code)]),
+    [code, fixedSrc],
+  )
   const [idx, setIdx] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
   const src = sources[idx] || ''
 
-  useEffect(() => { setIdx(0) }, [code])
+  // Reset when the photo changes (during render, so a cached image's ref check below is not undone)
+  const key = `${code}|${fixedSrc || ''}`
+  const [stateKey, setStateKey] = useState(key)
+  if (stateKey !== key) {
+    setStateKey(key)
+    setIdx(0)
+    setLoaded(false)
+    setFailed(false)
+  }
 
-  if (!sources.length) {
+  // A cached image can finish decoding before React attaches onLoad
+  const imgRef = useCallback((img) => {
+    if (img?.complete && img.naturalWidth > 0) setLoaded(true)
+  }, [])
+
+  if (!sources.length || failed) {
     return <div className={`photo-fallback ${className}`}>{t(getLang(), 'photo.soon')}</div>
   }
 
   return (
     <img
+      ref={imgRef}
       src={src}
       alt={alt}
-      className={className}
-      loading="lazy"
+      className={`smart-img ${loaded ? 'is-loaded' : ''} ${className}`}
+      loading={eager ? 'eager' : 'lazy'}
       decoding="async"
-      onError={() => setIdx((i) => (i + 1 < sources.length ? i + 1 : i))}
+      draggable="false"
+      onLoad={() => setLoaded(true)}
+      onError={() => {
+        if (idx + 1 < sources.length) setIdx(idx + 1)
+        else setFailed(true)
+      }}
     />
   )
 }

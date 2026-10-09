@@ -1,19 +1,47 @@
-import React, { useState, useEffect } from 'react'
-import { apiFetch, haptic, insideTelegram, showAlert } from '../utils/api'
+import React, { useState, useEffect, useRef } from 'react'
+import { Check, Copy, Send, UserPlus } from 'lucide-react'
+import { apiFetch, getTg, haptic, insideTelegram, showAlert } from '../utils/api'
 import { t } from '../i18n'
+import { ErrorState, Skeleton } from './ui'
+
+function legacyCopy(text) {
+  const area = document.createElement('textarea')
+  area.value = text
+  area.setAttribute('readonly', '')
+  area.style.position = 'fixed'
+  area.style.opacity = '0'
+  document.body.appendChild(area)
+  area.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch (_) { ok = false }
+  area.remove()
+  return ok
+}
 
 export default function ReferralsPage({ lang }) {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const copiedTimer = useRef(null)
 
   useEffect(() => {
-    if (!insideTelegram()) { setLoading(false); return }
-    apiFetch('/api/referral/me')
-      .then(({ ok, data }) => { if (ok) setStats(data) })
+    if (!insideTelegram()) { setLoading(false); return undefined }
+    const controller = new AbortController()
+    setLoading(true)
+    setLoadError(null)
+    apiFetch('/api/referral/me', { signal: controller.signal })
+      .then(({ ok, status, data }) => {
+        if (ok) setStats(data)
+        else setLoadError(status === 0 ? t(lang, 'common.offline') : t(lang, 'common.error'))
+        setLoading(false)
+      })
       .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+    return () => controller.abort()
+  }, [lang, reloadKey])
+
+  useEffect(() => () => clearTimeout(copiedTimer.current), [])
 
   const referralLink = stats?.link || ''
   const bonus = stats?.bonus_per_referral ?? 3
@@ -21,77 +49,95 @@ export default function ReferralsPage({ lang }) {
 
   const handleCopy = () => {
     if (!referralLink) return
-    navigator.clipboard.writeText(referralLink).then(() => {
+    const done = () => {
       setCopied(true)
       haptic('success')
-      setTimeout(() => setCopied(false), 2000)
-    }).catch(() => showAlert(referralLink))
+      clearTimeout(copiedTimer.current)
+      copiedTimer.current = setTimeout(() => setCopied(false), 2000)
+    }
+    // Some Telegram webviews reject the async Clipboard API: fall back to execCommand, then show the link
+    const fallback = () => (legacyCopy(referralLink) ? done() : showAlert(referralLink))
+    if (!navigator.clipboard?.writeText) { fallback(); return }
+    navigator.clipboard.writeText(referralLink).then(done).catch(fallback)
   }
 
   const handleShare = () => {
     if (!referralLink) return
     haptic('medium')
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(t(lang, 'ref.shareText'))}`
-    const tg = window.Telegram?.WebApp
+    const tg = getTg()
     if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl)
-    else window.open(shareUrl, '_blank')
+    else window.open(shareUrl, '_blank', 'noopener')
   }
 
   return (
-    <div className="referrals-page page-enter">
-      <div className="ref-hero">
-        <div className="ref-hero-glow"></div>
-        <div className="ref-hero-icon">🎁</div>
-        <h1 className="ref-hero-title">{t(lang, 'ref.title')}</h1>
-        <p className="ref-hero-subtitle">{t(lang, 'ref.subtitle', { bonus })}</p>
-      </div>
+    <div className="referrals">
+      <header className="page-header page-header-center">
+        <div className="hero-mark" aria-hidden="true"><UserPlus size={28} /></div>
+        <h1 className="page-title">{t(lang, 'ref.title')}</h1>
+        <p className="page-subtitle">{t(lang, 'ref.subtitle', { bonus })}</p>
+      </header>
 
       {loading ? (
-        <div className="ref-loading"><div className="spinner"></div></div>
+        <>
+          <Skeleton className="ref-stats-skeleton" />
+          <Skeleton className="ref-link-skeleton" />
+        </>
+      ) : loadError ? (
+        <ErrorState lang={lang} text={loadError} onRetry={() => setReloadKey((k) => k + 1)} />
       ) : (
         <>
-          <div className="ref-stats">
-            <div className="ref-stat-card">
-              <div className="ref-stat-number">{totalRefs}</div>
-              <div className="ref-stat-label">{t(lang, 'ref.invited')}</div>
+          <section className="card ref-stats" aria-label={t(lang, 'ref.invited')}>
+            <div className="ref-stat">
+              <span className="ref-stat-value">{totalRefs}</span>
+              <span className="ref-stat-label">{t(lang, 'ref.invited')}</span>
             </div>
-            <div className="ref-stat-divider"></div>
-            <div className="ref-stat-card">
-              <div className="ref-stat-number ref-stat-bonus">+{totalRefs * bonus}</div>
-              <div className="ref-stat-label">{t(lang, 'ref.bonus')}</div>
+            <div className="ref-stat">
+              <span className="ref-stat-value ref-stat-accent">+{totalRefs * bonus}</span>
+              <span className="ref-stat-label">{t(lang, 'ref.bonus')}</span>
             </div>
-          </div>
-          {stats?.bonus_selfies_left > 0 && (
-            <p className="ref-hero-subtitle" style={{ textAlign: 'center' }}>{t(lang, 'ref.left', { count: stats.bonus_selfies_left })}</p>
-          )}
+            {stats?.bonus_selfies_left > 0 && (
+              <p className="ref-left">{t(lang, 'ref.left', { count: stats.bonus_selfies_left })}</p>
+            )}
+          </section>
 
           {referralLink ? (
-            <div className="ref-link-section">
-              <div className="ref-link-label">{t(lang, 'ref.yourLink')}</div>
-              <div className="ref-link-box" onClick={handleCopy}>
-                <span className="ref-link-text">{referralLink}</span>
-                <span className="ref-link-copy-icon">{copied ? '✅' : '📋'}</span>
+            <section className="ref-link-section">
+              <h2 className="section-title">{t(lang, 'ref.yourLink')}</h2>
+              <div className="link-field">
+                <span className="link-field-text">{referralLink}</span>
+                <button
+                  type="button"
+                  className={`icon-btn link-field-copy ${copied ? 'is-done' : ''}`}
+                  onClick={handleCopy}
+                  aria-label={copied ? t(lang, 'ref.copied') : t(lang, 'ref.copy')}
+                >
+                  {copied ? <Check size={20} /> : <Copy size={20} />}
+                </button>
               </div>
-              <div className="ref-actions">
-                <button className="ref-btn ref-btn-copy" onClick={handleCopy}>{copied ? t(lang, 'ref.copied') : t(lang, 'ref.copy')}</button>
-                <button className="ref-btn ref-btn-share" onClick={handleShare}>{t(lang, 'ref.share')}</button>
-              </div>
-            </div>
+              <p className="sr-only" aria-live="polite">{copied ? t(lang, 'ref.copied') : ''}</p>
+              <button type="button" className="btn btn-primary btn-lg btn-block" onClick={handleShare}>
+                <Send size={19} />
+                <span>{t(lang, 'ref.share')}</span>
+              </button>
+            </section>
           ) : (
-            <p className="ref-hero-subtitle" style={{ textAlign: 'center' }}>{t(lang, 'common.openInTelegram')}</p>
+            <p className="muted-line center">{t(lang, 'common.openInTelegram')}</p>
           )}
         </>
       )}
 
-      <div className="ref-steps">
-        <h3 className="ref-steps-title">{t(lang, 'ref.how')}</h3>
-        {[1, 2, 3, 4].map((n) => (
-          <div key={n} className="ref-step">
-            <div className="ref-step-num">{n}</div>
-            <div className="ref-step-text">{t(lang, `ref.step${n}`, { bonus })}</div>
-          </div>
-        ))}
-      </div>
+      <section className="card ref-steps">
+        <h2 className="section-title">{t(lang, 'ref.how')}</h2>
+        <ol className="steps">
+          {[1, 2, 3, 4].map((n) => (
+            <li key={n} className="step">
+              <span className="step-num" aria-hidden="true">{n}</span>
+              <span className="step-text">{t(lang, `ref.step${n}`, { bonus })}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
     </div>
   )
 }

@@ -48,6 +48,46 @@ export function getUserId() {
   return id ? String(id) : null
 }
 
+/** Telegram profile for display only (first name, photo); empty object outside Telegram. */
+export function getTelegramUser() {
+  return getTg()?.initDataUnsafe?.user ?? {}
+}
+
+/**
+ * True when the Telegram client supports a Bot API version (methods of newer versions only log
+ * warnings on older clients and in a plain browser, where the SDK reports 6.0). Mocks without
+ * `isVersionAtLeast` are treated as supporting everything.
+ */
+export function tgSupports(version) {
+  const tg = getTg()
+  if (!tg) return false
+  if (typeof tg.isVersionAtLeast !== 'function') return true
+  try {
+    return tg.isVersionAtLeast(version)
+  } catch (_) {
+    return false
+  }
+}
+
+/**
+ * Telegram BackButton bound to `onBack` while mounted (Bot API 6.1+).
+ * Returns a cleanup function; a no-op outside Telegram.
+ */
+export function bindBackButton(onBack) {
+  const button = getTg()?.BackButton
+  if (!button?.show || !button?.onClick || !tgSupports('6.1')) return () => {}
+  try {
+    button.onClick(onBack)
+    button.show()
+  } catch (_) {}
+  return () => {
+    try {
+      button.offClick?.(onBack)
+      button.hide()
+    } catch (_) {}
+  }
+}
+
 const DEV_USER_ID = import.meta.env.DEV ? import.meta.env.VITE_DEV_USER_ID : undefined
 
 /** True when the backend can authenticate us (Telegram initData, or the dev-only bypass). */
@@ -141,8 +181,9 @@ export function getStartParams() {
 export function haptic(kind = 'light') {
   try {
     const feedback = getTg()?.HapticFeedback
-    if (!feedback) return
+    if (!feedback || !tgSupports('6.1')) return
     if (kind === 'success' || kind === 'error' || kind === 'warning') feedback.notificationOccurred(kind)
+    else if (kind === 'selection') feedback.selectionChanged?.()
     else feedback.impactOccurred(kind)
   } catch (_) {}
 }

@@ -2,21 +2,27 @@ import React from 'react'
 import SmartImage from './SmartImage'
 import { t } from '../i18n'
 
-export default function PersonaCard({ persona, lang, onClick }) {
+export default function PersonaCard({ persona, lang, onClick, index = 0 }) {
   return (
-    <div className="persona-card" onClick={onClick} role="button" tabIndex={0}>
-      <div className="persona-card-image">
-        <SmartImage code={persona.code} alt={persona.name} className="card-img" />
-        <div className="card-gradient"></div>
-        <div className="card-info">
-          <div className="card-name">{persona.name}, {persona.age}</div>
-          <div className="card-tagline-mini">{persona.tagline}</div>
-          <div className="card-status">
-            <span className="online-dot"></span>
-            {t(lang, 'card.online')}
-          </div>
-        </div>
-      </div>
-    </div>
+    <button
+      type="button"
+      className="persona-card"
+      onClick={onClick}
+      aria-label={t(lang, 'card.open', { name: persona.name, age: persona.age })}
+      style={{ '--i': index }}
+    >
+      <SmartImage code={persona.code} alt="" className="card-img" eager={index < 4} />
+      <span className="card-scrim" aria-hidden="true" />
+      <span className="card-info">
+        <span className="card-name">
+          {persona.name}<span className="card-age">{persona.age}</span>
+        </span>
+        <span className="card-tagline">{persona.tagline}</span>
+        <span className="card-status">
+          <span className="online-dot" aria-hidden="true" />
+          {t(lang, 'card.online')}
+        </span>
+      </span>
+    </button>
   )
 }
