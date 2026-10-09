@@ -10,12 +10,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-    <meta name="description" content="Выбери девушку и начни увлекательное общение" />
+    <meta name="description" content="HayalKız — AI companions in Telegram" />
     <!-- Prevent caching in Telegram Mini App -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>HayalKız · Исследуй</title>
+    <title>HayalKız</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
       /* Prevent FOUC (Flash of Unstyled Content) */
@@ -49,49 +49,10 @@
   </head>
   <body>
     <div id="root">
-      <div class="loading-screen">Загрузка...</div>
+      <div class="loading-screen">…</div>
     </div>
     <script>
-      // Ensure Telegram WebApp is initialized
-      function ensureTelegramReady() {
-        if (window.Telegram && window.Telegram.WebApp) {
-          const tg = window.Telegram.WebApp;
-          try {
-            tg.ready();
-            tg.expand();
-            tg.setHeaderColor('#07060F');
-            tg.setBackgroundColor('#07060F');
-          } catch (e) {
-            console.warn('Telegram WebApp init error:', e);
-          }
-        }
-      }
-      
-      // Wait for Telegram script to load (max 10 attempts = 500ms)
-      let attempts = 0;
-      const maxAttempts = 10;
-      
-      function waitForTelegram() {
-        if (window.Telegram && window.Telegram.WebApp) {
-          ensureTelegramReady();
-        } else if (attempts < maxAttempts) {
-          attempts++;
-          setTimeout(waitForTelegram, 50);
-        } else {
-          // Telegram not available, app will still work
-          console.log('Telegram WebApp not detected, running in standalone mode');
-        }
-      }
-      
-      // Start checking once DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', waitForTelegram);
-      } else {
-        waitForTelegram();
-      }
-      
-      // Also try on window load
-      window.addEventListener('load', ensureTelegramReady);
+      try { window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.ready() } catch (e) {}
     </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>

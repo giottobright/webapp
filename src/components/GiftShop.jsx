@@ -1,111 +1,134 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { API_BASE, getTg, getLang } from '../utils/api'
+import { apiFetch, haptic, insideTelegram, openInvoice, showAlert } from '../utils/api'
+import { t } from '../i18n'
+import MyGifts from './MyGifts'
 
-export default function GiftShop({ persona, onPurchaseSuccess }) {
-  const lang = getLang()
+export default function GiftShop({ persona, personas, lang }) {
   const [gifts, setGifts] = useState([])
   const [categories, setCategories] = useState([])
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [shopSection, setShopSection] = useState('all')
+  const [view, setView] = useState('catalog')
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState(null)
 
-  useEffect(() => { loadGifts() }, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    apiFetch(`/api/gifts?language=${lang}`, { signal: controller.signal })
+      .then(({ ok, data }) => {
+        if (ok) { setGifts(data.gifts || []); setCategories(data.categories || []) }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+    return () => controller.abort()
+  }, [lang])
 
-  const loadGifts = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/gifts?language=${lang}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = await response.json()
-      if (data.ok) { setGifts(data.gifts || []); setCategories(data.categories || []) }
-    } catch (error) { console.error('Failed to load gifts:', error) }
-    finally { setLoading(false) }
-  }
-
-  const isAllPersonas = !persona || persona?.code === 'all'
+  const personaCode = persona?.code || 'all'
+  const personaName = persona ? persona.name : t(lang, 'shop.toGirls')
 
   const handlePurchase = async (gift) => {
-    const t = getTg()
-    try { t?.HapticFeedback?.impactOccurred('medium') } catch (_) {}
+    if (!insideTelegram()) { showAlert(t(lang, 'common.notTelegram')); return }
+    haptic('medium')
     setPurchasing(gift.code)
     try {
-      const userId = t?.initDataUnsafe?.user?.id || 'test_user'
-      const personaCode = isAllPersonas ? 'all' : persona.code
-      const response = await fetch(`${API_BASE}/api/gifts/purchase`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, gift_code: gift.code, persona: personaCode, context_type: 'shop' })
+      const vars = { emoji: gift.emoji, gift: gift.name, name: personaName }
+      if (!gift.price) {
+        const { ok, status, data } = await apiFetch('/api/gifts/purchase', {
+          method: 'POST', body: { gift_code: gift.code, persona: personaCode, context_type: 'shop' },
+        })
+        if (ok) { haptic('success'); showAlert(t(lang, 'shop.gifted', vars)); return }
+        haptic('error')
+        showAlert(status === 429 ? t(lang, 'shop.freeLimit') : t(lang, 'common.error'))
+        return
+      }
+      const { ok, data } = await apiFetch('/api/gifts/invoice', {
+        method: 'POST', body: { gift_code: gift.code, persona: personaCode },
       })
-      const data = await response.json()
-      if (data.ok) {
-        try { t?.HapticFeedback?.notificationOccurred('success') } catch (_) {}
-        const personaName = isAllPersonas ? (lang === 'ru' ? 'девушкам' : 'kızlara') : (lang === 'ru' ? persona.name_ru : persona.name_tr)
-        const msg = lang === 'ru' ? `✅ ${gift.emoji} ${gift.name} подарено ${personaName}!` : `✅ ${gift.emoji} ${gift.name}, ${personaName}'e hediye edildi!`
-        if (t?.showAlert) { t.showAlert(msg) } else { alert(msg) }
-        onPurchaseSuccess?.()
-      } else { throw new Error(data.error || 'Purchase failed') }
-    } catch (error) {
-      try { t?.HapticFeedback?.notificationOccurred('error') } catch (_) {}
-      const msg = lang === 'ru' ? 'Ошибка покупки' : 'Satın alma hatası'
-      if (getTg()?.showAlert) { getTg().showAlert(msg) } else { alert(msg) }
-    } finally { setPurchasing(null) }
+      if (!ok || !data?.invoice_url) { haptic('error'); showAlert(t(lang, 'common.error')); return }
+      const result = await openInvoice(data.invoice_url)
+      if (result === 'paid') { haptic('success'); showAlert(t(lang, 'shop.paidGifted', vars)) }
+      else if (result === 'cancelled') showAlert(t(lang, 'shop.paymentCancelled'))
+      else if (result !== 'pending') showAlert(t(lang, 'common.error'))
+    } finally {
+      setPurchasing(null)
+    }
   }
 
   const filteredGifts = useMemo(() => {
     let filtered = gifts
-    if (selectedCategory) filtered = filtered.filter(g => g.category === selectedCategory)
+    if (selectedCategory) filtered = filtered.filter((g) => g.category === selectedCategory)
     if (shopSection === 'popular') filtered = [...filtered].sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
     else if (shopSection === 'new') filtered = [...filtered].sort((a, b) => (b.id || 0) - (a.id || 0))
     return filtered
   }, [gifts, selectedCategory, shopSection])
 
-  const personaName = isAllPersonas ? (lang === 'ru' ? 'Все девушки' : 'Tüm kızlar') : (lang === 'ru' ? persona.name_ru : persona.name_tr)
-
   return (
     <div className="shop-screen">
       <div className="shop-header-main">
         <div className="shop-header-content">
-          <h1 className="shop-main-title">{lang === 'ru' ? '🎁 Магазин подарков' : '🎁 Hediye Dükkanı'}</h1>
-          {!isAllPersonas && <p className="shop-main-subtitle">{lang === 'ru' ? `для ${personaName}` : `${personaName} için`}</p>}
+          <h1 className="shop-main-title">{t(lang, 'shop.title')}</h1>
+          {persona && <p className="shop-main-subtitle">{t(lang, 'shop.for', { name: persona.name })}</p>}
         </div>
       </div>
       <div className="shop-sections">
-        {['all', 'popular', 'new'].map(s => (
-          <button key={s} className={`shop-section-btn ${shopSection === s ? 'active' : ''}`} onClick={() => setShopSection(s)}>
-            {s === 'all' ? (lang === 'ru' ? 'Все' : 'Tümü') : s === 'popular' ? (lang === 'ru' ? '⭐ Популярное' : '⭐ Popüler') : (lang === 'ru' ? '✨ Новое' : '✨ Yeni')}
-          </button>
-        ))}
+        <button className={`shop-section-btn ${view === 'catalog' ? 'active' : ''}`} onClick={() => setView('catalog')}>{t(lang, 'shop.catalog')}</button>
+        <button className={`shop-section-btn ${view === 'mine' ? 'active' : ''}`} onClick={() => setView('mine')}>{t(lang, 'shop.myGifts')}</button>
       </div>
-      {categories.length > 0 && (
-        <div className="categories-scroll">
-          <button className={`category-chip ${!selectedCategory ? 'active' : ''}`} onClick={() => setSelectedCategory(null)}>{lang === 'ru' ? 'Все' : 'Tümü'}</button>
-          {categories.map(cat => <button key={cat.code} className={`category-chip ${selectedCategory === cat.code ? 'active' : ''}`} onClick={() => setSelectedCategory(cat.code)}>{cat.emoji} {cat.name}</button>)}
-        </div>
-      )}
-      <div className="shop-grid-main">
-        {loading ? (
-          <div className="shop-loading"><div className="spinner"></div><p>{lang === 'ru' ? 'Загрузка...' : 'Yükleniyor...'}</p></div>
-        ) : filteredGifts.length > 0 ? (
-          filteredGifts.map(gift => (
-            <div key={gift.code} className="gift-card-new">
-              <div className="gift-icon-large">{gift.emoji}</div>
-              <div className="gift-info-new">
-                <h3 className="gift-name-new">{gift.name}</h3>
-                <p className="gift-description-new">{gift.description}</p>
-                <div className="gift-price-new">
-                  {gift.price === 0 ? <span className="price-free-new">{lang === 'ru' ? 'Бесплатно' : 'Ücretsiz'}</span> : <span className="price-stars-new">⭐ {gift.price}</span>}
-                </div>
-              </div>
-              <button className={`gift-buy-btn-new ${purchasing === gift.code ? 'purchasing' : ''}`} onClick={() => handlePurchase(gift)} disabled={purchasing === gift.code}>
-                {purchasing === gift.code ? <span className="btn-spinner"></span> : <span>{lang === 'ru' ? '🎁 Подарить' : '🎁 Hediye Et'}</span>}
+
+      {view === 'mine' ? (
+        <MyGifts lang={lang} personas={personas} onOpenShop={() => setView('catalog')} />
+      ) : (
+        <>
+          <div className="shop-sections">
+            {['all', 'popular', 'new'].map((s) => (
+              <button key={s} className={`shop-section-btn ${shopSection === s ? 'active' : ''}`} onClick={() => setShopSection(s)}>
+                {t(lang, `shop.${s}`)}
               </button>
-            </div>
-          ))
-        ) : (
-          <div className="shop-empty">
-            {gifts.length === 0 ? <><p style={{ fontSize: '18px', marginBottom: '8px' }}>📦</p><p style={{ fontWeight: 600 }}>{lang === 'ru' ? 'Магазин пуст' : 'Mağaza boş'}</p></> : <p>{lang === 'ru' ? 'Нет подарков в этой категории' : 'Bu kategoride hediye yok'}</p>}
+            ))}
           </div>
-        )}
-      </div>
+          {categories.length > 0 && (
+            <div className="categories-scroll">
+              <button className={`category-chip ${!selectedCategory ? 'active' : ''}`} onClick={() => setSelectedCategory(null)}>{t(lang, 'shop.all')}</button>
+              {categories.map((cat) => (
+                <button key={cat.code} className={`category-chip ${selectedCategory === cat.code ? 'active' : ''}`} onClick={() => setSelectedCategory(cat.code)}>
+                  {cat.emoji} {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="shop-grid-main">
+            {loading ? (
+              <div className="shop-loading"><div className="spinner"></div><p>{t(lang, 'common.loading')}</p></div>
+            ) : filteredGifts.length > 0 ? (
+              filteredGifts.map((gift) => (
+                <div key={gift.code} className="gift-card-new">
+                  <div className="gift-icon-large">{gift.emoji}</div>
+                  <div className="gift-info-new">
+                    <h3 className="gift-name-new">{gift.name}</h3>
+                    <p className="gift-description-new">{gift.description}</p>
+                    <div className="gift-price-new">
+                      {gift.price ? <span className="price-stars-new">⭐ {gift.price}</span> : <span className="price-free-new">{t(lang, 'shop.free')}</span>}
+                    </div>
+                  </div>
+                  <button
+                    className={`gift-buy-btn-new ${purchasing === gift.code ? 'purchasing' : ''}`}
+                    onClick={() => handlePurchase(gift)}
+                    disabled={!!purchasing}
+                  >
+                    {purchasing === gift.code ? <span className="btn-spinner"></span> : <span>{t(lang, 'shop.give')}</span>}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="shop-empty">
+                {gifts.length === 0
+                  ? <><p style={{ fontSize: '18px', marginBottom: '8px' }}>📦</p><p style={{ fontWeight: 600 }}>{t(lang, 'shop.empty')}</p></>
+                  : <p>{t(lang, 'shop.emptyCategory')}</p>}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
