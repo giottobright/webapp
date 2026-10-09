@@ -40,3 +40,13 @@ describe('persona catalog', () => {
     expect(localizePersona(legacy, 'ru')).toMatchObject({ name: 'Икс', tags: ['a'] })
   })
 })
+
+describe('purchaseName', () => {
+  it('uses the English gift name and falls back to Turkish', async () => {
+    const { purchaseName } = await import('../i18n')
+    const row = { name_ru: 'Букет роз', name_tr: 'Gül buketi', name_en: 'Bouquet of roses' }
+    expect(purchaseName(row, 'en')).toBe('Bouquet of roses')
+    expect(purchaseName(row, 'ru')).toBe('Букет роз')
+    expect(purchaseName({ name_ru: 'Букет роз', name_tr: 'Gül buketi' }, 'en')).toBe('Gül buketi')
+  })
+})
