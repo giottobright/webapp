@@ -1,149 +1,127 @@
-import React, { useState, useEffect } from 'react'
-import { API_BASE, getTg, getLang } from '../utils/api'
+import React, { useState, useEffect, useCallback } from 'react'
+import { apiFetch, haptic, insideTelegram, openInvoice, showAlert } from '../utils/api'
+import { formatDate, t } from '../i18n'
 
-export default function PremiumPage() {
-  const lang = getLang()
-  const tg = getTg()
-  const [userPlan, setUserPlan] = useState('free')
+const GRADIENTS = {
+  free: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))',
+  premium: 'linear-gradient(135deg, rgba(255,0,110,0.1), rgba(131,56,236,0.08))',
+  vip: 'linear-gradient(135deg, rgba(131,56,236,0.12), rgba(58,134,255,0.08))',
+}
+const ICONS = { free: '🆓', premium: '⭐', vip: '💎' }
+
+export default function PremiumPage({ lang }) {
+  const [plans, setPlans] = useState([])
+  const [current, setCurrent] = useState({ plan: 'free', expires: null, recurring: false })
   const [loading, setLoading] = useState(true)
   const [upgrading, setUpgrading] = useState(null)
 
-  useEffect(() => { loadPlan() }, [])
+  const loadCurrent = useCallback(async () => {
+    if (!insideTelegram()) return
+    const { ok, data } = await apiFetch('/api/profile/me')
+    if (ok && data?.profile) {
+      setCurrent({
+        plan: data.profile.plan || 'free',
+        expires: data.profile.subscription_expires_at,
+        recurring: Boolean(data.profile.subscription_recurring),
+      })
+    }
+  }, [])
 
-  const loadPlan = async () => {
+  useEffect(() => {
+    Promise.all([
+      apiFetch(`/api/plans?language=${lang}`).then(({ ok, data }) => { if (ok) setPlans(data.plans || []) }),
+      loadCurrent(),
+    ]).catch(() => {}).finally(() => setLoading(false))
+  }, [lang, loadCurrent])
+
+  const handleUpgrade = async (planCode) => {
+    if (!insideTelegram()) { showAlert(t(lang, 'common.notTelegram')); return }
+    haptic('medium')
+    setUpgrading(planCode)
     try {
-      const userId = tg?.initDataUnsafe?.user?.id || 'test_user'
-      const response = await fetch(`${API_BASE}/api/subscription/${userId}`)
-      const data = await response.json()
-      if (data.ok) setUserPlan(data.plan || 'free')
-    } catch (error) { console.error('Failed to load plan:', error) }
-    finally { setLoading(false) }
-  }
-
-  const handleUpgrade = (planId) => {
-    try { tg?.HapticFeedback?.impactOccurred('medium') } catch (_) {}
-    setUpgrading(planId)
-
-    if (tg) {
-      const payload = JSON.stringify({ action: 'upgrade', plan: planId })
-      tg.sendData(payload)
-      try { tg.HapticFeedback.notificationOccurred('success') } catch (_) {}
-      setTimeout(() => {
-        setUpgrading(null)
-        try { tg.close() } catch (_) {}
-      }, 500)
-    } else {
-      const msg = lang === 'ru'
-        ? 'Оплата доступна только через Telegram бота. Используй /premium в чате.'
-        : 'Ödeme sadece Telegram botu üzerinden yapılabilir. Sohbette /premium kullanın.'
-      alert(msg)
+      const { ok, data } = await apiFetch('/api/subscription/invoice', { method: 'POST', body: { plan: planCode } })
+      if (!ok || !data?.invoice_url) {
+        haptic('error')
+        showAlert(data?.error === 'age_not_confirmed' ? t(lang, 'common.openInTelegram') : t(lang, 'premium.failed'))
+        return
+      }
+      const result = await openInvoice(data.invoice_url)
+      if (result === 'paid') {
+        haptic('success')
+        const plan = plans.find((p) => p.code === planCode)
+        showAlert(t(lang, 'premium.paid', { plan: plan?.name || planCode }))
+        // The bot activates the plan when Telegram confirms the payment
+        setTimeout(loadCurrent, 2500)
+      } else if (result === 'cancelled') {
+        showAlert(t(lang, 'premium.cancelled'))
+      } else if (result !== 'pending') {
+        showAlert(t(lang, 'premium.failed'))
+      }
+    } finally {
       setUpgrading(null)
     }
   }
 
-  const plans = [
-    {
-      id: 'free',
-      name: lang === 'ru' ? 'Бесплатный' : 'Ücretsiz',
-      price: lang === 'ru' ? 'Бесплатно' : 'Ücretsiz',
-      icon: '🆓',
-      gradient: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))',
-      features: lang === 'ru'
-        ? ['3 селфи в день', '1 видео в день', '5 голосовых в день', 'Базовые функции']
-        : ['Günde 3 selfie', 'Günde 1 video', 'Günde 5 sesli mesaj', 'Temel özellikler'],
-    },
-    {
-      id: 'premium',
-      name: 'Premium',
-      price: '⭐ 500 Stars',
-      priceNote: lang === 'ru' ? '/месяц' : '/ay',
-      icon: '⭐',
-      popular: true,
-      gradient: 'linear-gradient(135deg, rgba(255,0,110,0.1), rgba(131,56,236,0.08))',
-      features: lang === 'ru'
-        ? ['20 селфи в день', '5 видео в день', '30 голосовых в день', 'Приоритетные ответы', 'Без рекламы']
-        : ['Günde 20 selfie', 'Günde 5 video', 'Günde 30 sesli mesaj', 'Öncelikli yanıtlar', 'Reklamsız'],
-    },
-    {
-      id: 'vip',
-      name: 'VIP',
-      price: '⭐ 1000 Stars',
-      priceNote: lang === 'ru' ? '/месяц' : '/ay',
-      icon: '💎',
-      gradient: 'linear-gradient(135deg, rgba(131,56,236,0.12), rgba(58,134,255,0.08))',
-      features: lang === 'ru'
-        ? ['∞ селфи в день', '15 видео в день', '∞ голосовых', 'VIP поддержка', 'Эксклюзивные функции', 'Ранний доступ']
-        : ['Sınırsız selfie', 'Günde 15 video', 'Sınırsız sesli', 'VIP destek', 'Özel özellikler', 'Erken erişim'],
-    },
-  ]
+  const currentName = plans.find((p) => p.code === current.plan)?.name || t(lang, `plan.${current.plan}`)
 
   return (
     <div className="premium-screen page-enter">
       <div className="premium-hero">
         <div className="premium-hero-glow"></div>
-        <h1 className="premium-hero-title">
-          {lang === 'ru' ? '⭐ Подписки' : '⭐ Abonelikler'}
-        </h1>
-        <p className="premium-hero-sub">
-          {lang === 'ru' ? 'Разблокируй все возможности' : 'Tüm özelliklerin kilidini aç'}
-        </p>
+        <h1 className="premium-hero-title">{t(lang, 'premium.title')}</h1>
+        <p className="premium-hero-sub">{t(lang, 'premium.subtitle')}</p>
         {!loading && (
           <div className="premium-current-badge">
-            {lang === 'ru' ? 'Твой план: ' : 'Planın: '}
-            <strong>{userPlan === 'free' ? (lang === 'ru' ? 'Бесплатный' : 'Ücretsiz') : userPlan.toUpperCase()}</strong>
+            {t(lang, 'premium.current')}<strong>{currentName}</strong>
+            {current.expires && current.plan !== 'free' && (
+              <div style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: 4 }}>
+                {t(lang, current.recurring ? 'premium.renews' : 'premium.until', { date: formatDate(current.expires, lang) })}
+              </div>
+            )}
           </div>
         )}
       </div>
 
       <div className="premium-plans">
-        {plans.map(plan => {
-          const isCurrent = userPlan === plan.id
+        {loading && <div className="shop-loading"><div className="spinner"></div></div>}
+        {plans.map((plan) => {
+          const isCurrent = current.plan === plan.code
+          const popular = plan.code === 'premium'
           return (
             <div
-              key={plan.id}
-              className={`premium-plan-card ${plan.popular ? 'popular' : ''} ${isCurrent ? 'current' : ''}`}
-              style={{ background: plan.gradient }}
+              key={plan.code}
+              className={`premium-plan-card ${popular ? 'popular' : ''} ${isCurrent ? 'current' : ''}`}
+              style={{ background: GRADIENTS[plan.code] || GRADIENTS.free }}
             >
-              {plan.popular && !isCurrent && (
-                <div className="premium-popular-badge">
-                  {lang === 'ru' ? '🔥 Популярный' : '🔥 Popüler'}
-                </div>
-              )}
-              {isCurrent && (
-                <div className="premium-current-label">
-                  {lang === 'ru' ? '✅ Активен' : '✅ Aktif'}
-                </div>
-              )}
+              {popular && !isCurrent && <div className="premium-popular-badge">{t(lang, 'premium.popular')}</div>}
+              {isCurrent && <div className="premium-current-label">{t(lang, 'premium.active')}</div>}
 
               <div className="premium-plan-header">
-                <span className="premium-plan-icon">{plan.icon}</span>
+                <span className="premium-plan-icon">{ICONS[plan.code] || '⭐'}</span>
                 <div>
                   <h2 className="premium-plan-name">{plan.name}</h2>
                   <div className="premium-plan-price">
-                    {plan.price}
-                    {plan.priceNote && <span className="premium-price-note">{plan.priceNote}</span>}
+                    {plan.stars ? `⭐ ${plan.stars} Stars` : t(lang, 'shop.free')}
+                    {plan.stars > 0 && <span className="premium-price-note">{t(lang, 'premium.perMonth')}</span>}
                   </div>
                 </div>
               </div>
 
               <ul className="premium-features">
-                {plan.features.map((f, i) => (
-                  <li key={i}>
-                    <span className="premium-check">✓</span>
-                    {f}
-                  </li>
+                {plan.features.map((feature) => (
+                  <li key={feature}><span className="premium-check">✓</span>{feature}</li>
                 ))}
               </ul>
 
-              {!isCurrent && plan.id !== 'free' && (
+              {plan.stars > 0 && (!isCurrent || !current.recurring) && (
                 <button
-                  className={`premium-upgrade-btn ${upgrading === plan.id ? 'loading' : ''}`}
-                  onClick={() => handleUpgrade(plan.id)}
+                  className={`premium-upgrade-btn ${upgrading === plan.code ? 'loading' : ''}`}
+                  onClick={() => handleUpgrade(plan.code)}
                   disabled={!!upgrading}
                 >
-                  {upgrading === plan.id
+                  {upgrading === plan.code
                     ? <span className="btn-spinner"></span>
-                    : (lang === 'ru' ? 'Выбрать план' : 'Planı Seç')}
+                    : t(lang, isCurrent ? 'premium.extend' : 'premium.choose')}
                 </button>
               )}
             </div>
@@ -151,13 +129,7 @@ export default function PremiumPage() {
         })}
       </div>
 
-      <div className="premium-footer-note">
-        <p>
-          {lang === 'ru'
-            ? '💡 Оплата через Telegram Stars. Также можно оформить подписку командой /premium в чате.'
-            : '💡 Telegram Stars ile ödeme. Ayrıca sohbette /premium komutu ile abone olabilirsiniz.'}
-        </p>
-      </div>
+      <div className="premium-footer-note"><p>{t(lang, 'premium.note')}</p></div>
     </div>
   )
 }

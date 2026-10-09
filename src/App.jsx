@@ -1,67 +1,86 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { PERSONAS } from './personas'
-import { getTg, getLang } from './utils/api'
+import { apiFetch, getLang, getStartParams, getTg, haptic, insideTelegram, showAlert } from './utils/api'
+import { localizePersona, t } from './i18n'
 import BottomNavigation from './components/BottomNavigation'
 import PersonaCard from './components/PersonaCard'
 import PersonaDetail from './components/PersonaDetail'
 import GiftShop from './components/GiftShop'
-import MyGifts from './components/MyGifts'
 import PremiumPage from './components/PremiumPage'
 import ReferralsPage from './components/ReferralsPage'
 import ProfilePage from './components/ProfilePage'
 
+const TABS = ['girls', 'shop', 'referrals', 'profile', 'premium']
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('girls')
-  const [selectedPersona, setSelectedPersona] = useState(null)
-  const [shopPersona, setShopPersona] = useState(null)
-  const [pageKey, setPageKey] = useState(0)
   const lang = getLang()
+  const start = useMemo(() => getStartParams(), [])
+  const [activeTab, setActiveTab] = useState(TABS.includes(start.tab) ? start.tab : 'girls')
+  const [personaCatalog, setPersonaCatalog] = useState(PERSONAS)
+  const [selectedPersona, setSelectedPersona] = useState(null)
+  const [shopPersonaCode, setShopPersonaCode] = useState(start.tab === 'shop' ? start.persona : null)
+  const [pageKey, setPageKey] = useState(0)
+
+  const personas = useMemo(() => personaCatalog.map((p) => localizePersona(p, lang)), [personaCatalog, lang])
 
   useEffect(() => {
-    const initTelegram = () => {
-      const t = getTg()
-      if (t) {
-        t.ready()
-        try { t.expand() } catch (_) {}
-        try { t.MainButton.hide() } catch (_) {}
-        try { t.setHeaderColor('#07060F'); t.setBackgroundColor('#07060F') } catch (_) {}
-        try { t.disableVerticalSwipes() } catch (_) {}
-      }
+    const tg = getTg()
+    if (tg) {
+      try { tg.ready() } catch (_) {}
+      try { tg.expand() } catch (_) {}
+      try { tg.setHeaderColor('#07060F'); tg.setBackgroundColor('#07060F') } catch (_) {}
+      try { tg.disableVerticalSwipes() } catch (_) {}
     }
-    initTelegram()
-    const timeout = setTimeout(initTelegram, 100)
-    return () => clearTimeout(timeout)
+    const controller = new AbortController()
+    apiFetch('/api/personas', { signal: controller.signal })
+      .then(({ ok, data }) => {
+        if (ok && Array.isArray(data?.personas) && data.personas.length) setPersonaCatalog(data.personas)
+      })
+      .catch(() => {})
+    return () => controller.abort()
   }, [])
 
-  const handleSelect = useCallback((code) => {
-    const payload = JSON.stringify({ persona: code })
-    const t = getTg()
-    if (t) {
-      t.sendData(payload)
-      try { t.HapticFeedback.notificationOccurred('success') } catch (_) {}
-      setTimeout(() => { try { t.close() } catch (_) {} }, 300)
-    } else {
-      alert('Telegram WebApp ortamı yok / Нет окружения Telegram WebApp')
+  const handleSelect = useCallback(async (code) => {
+    const tg = getTg()
+    if (insideTelegram()) {
+      const { ok, data } = await apiFetch('/api/persona/select', { method: 'POST', body: { persona: code } })
+      if (ok) {
+        haptic('success')
+        setTimeout(() => { try { tg?.close() } catch (_) {} }, 300)
+        return
+      }
+      haptic('error')
+      showAlert(data?.error === 'age_not_confirmed' ? t(lang, 'common.openInTelegram') : t(lang, 'common.error'))
+      return
     }
-  }, [])
+    // Opened from a reply-keyboard button: no initData, but sendData works
+    if (tg?.sendData) {
+      tg.sendData(JSON.stringify({ persona: code }))
+      return
+    }
+    showAlert(t(lang, 'common.notTelegram'))
+  }, [lang])
 
   const handleCardClick = useCallback((persona) => {
-    try { getTg()?.HapticFeedback?.impactOccurred('light') } catch (_) {}
+    haptic('light')
     setSelectedPersona(persona)
   }, [])
 
   const handleOpenShop = useCallback((persona) => {
-    setShopPersona(persona || { code: 'all', name_ru: 'Все девушки', name_tr: 'Tüm kızlar' })
+    setSelectedPersona(null)
+    setShopPersonaCode(persona?.code || null)
     setActiveTab('shop')
-    setPageKey(k => k + 1)
+    setPageKey((k) => k + 1)
   }, [])
 
   const handleTabChange = useCallback((tab) => {
-    try { getTg()?.HapticFeedback?.impactOccurred('light') } catch (_) {}
+    haptic('light')
     setActiveTab(tab)
-    setPageKey(k => k + 1)
-    if (tab === 'shop') setShopPersona({ code: 'all', name_ru: 'Все девушки', name_tr: 'Tüm kızlar' })
+    setPageKey((k) => k + 1)
+    if (tab === 'shop') setShopPersonaCode(null)
   }, [])
+
+  const shopPersona = personas.find((p) => p.code === shopPersonaCode) || null
 
   return (
     <div className="app">
@@ -70,28 +89,23 @@ export default function App() {
           <div key={`girls-${pageKey}`} className="page-enter">
             <header className="header">
               <div className="header-brand">
-                <h1 className="title">
-                  {lang === 'ru' ? 'Исследуй' : 'Keşfet'}
-                </h1>
+                <h1 className="title">{t(lang, 'girls.title')}</h1>
                 <div className="header-badge">
                   <span className="header-badge-dot"></span>
-                  {PERSONAS.length} {lang === 'ru' ? 'онлайн' : 'çevrimiçi'}
+                  {t(lang, 'girls.online', { count: personas.length })}
                 </div>
               </div>
-              <p className="subtitle">
-                {lang === 'ru'
-                  ? 'Выбери девушку и начни увлекательное общение'
-                  : 'Bir kız seç ve heyecanlı sohbete başla'}
-              </p>
+              <p className="subtitle">{t(lang, 'girls.subtitle')}</p>
             </header>
             <div className="grid">
-              {PERSONAS.map(p => (
-                <PersonaCard key={p.code} persona={p} onClick={() => handleCardClick(p)} />
+              {personas.map((p) => (
+                <PersonaCard key={p.code} persona={p} lang={lang} onClick={() => handleCardClick(p)} />
               ))}
             </div>
             {selectedPersona && (
               <PersonaDetail
                 persona={selectedPersona}
+                lang={lang}
                 onClose={() => setSelectedPersona(null)}
                 onSelect={() => handleSelect(selectedPersona.code)}
                 onOpenShop={handleOpenShop}
@@ -101,31 +115,26 @@ export default function App() {
         )}
         {activeTab === 'shop' && (
           <div key={`shop-${pageKey}`} className="page-enter">
-            <GiftShop persona={shopPersona} onPurchaseSuccess={() => {}} />
-          </div>
-        )}
-        {activeTab === 'mygifts' && (
-          <div key={`mygifts-${pageKey}`} className="page-enter">
-            <MyGifts onOpenShop={() => handleOpenShop(null)} />
+            <GiftShop persona={shopPersona} personas={personas} lang={lang} />
           </div>
         )}
         {activeTab === 'premium' && (
           <div key={`premium-${pageKey}`} className="page-enter">
-            <PremiumPage />
+            <PremiumPage lang={lang} />
           </div>
         )}
         {activeTab === 'referrals' && (
           <div key={`referrals-${pageKey}`} className="page-enter">
-            <ReferralsPage />
+            <ReferralsPage lang={lang} />
           </div>
         )}
         {activeTab === 'profile' && (
           <div key={`profile-${pageKey}`} className="page-enter">
-            <ProfilePage />
+            <ProfilePage lang={lang} />
           </div>
         )}
       </div>
-      <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+      <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} lang={lang} />
     </div>
   )
 }
