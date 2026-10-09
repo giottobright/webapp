@@ -169,9 +169,10 @@ export function localizePersona(persona, lang) {
   }
 }
 
-/** Gift purchase rows carry only ru/tr names (gift catalog languages); en falls back to tr. */
+/** Gift purchase rows carry name_ru / name_tr / name_en (backend migration 003); missing ones fall back to Turkish. */
 export function purchaseName(purchase, lang) {
   if (lang === 'ru') return purchase.name_ru || purchase.name_tr || ''
+  if (lang === 'en') return purchase.name_en || purchase.name_tr || purchase.name_ru || ''
   return purchase.name_tr || purchase.name_ru || ''
 }
 
