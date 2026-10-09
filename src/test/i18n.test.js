@@ -16,7 +16,7 @@ describe('i18n', () => {
   })
 
   it('falls back to English and then the key', () => {
-    expect(t('de', 'nav.shop')).toBe('Shop')
+    expect(t('de', 'nav.shop')).toBe('Gifts')
     expect(t('ru', 'missing.key')).toBe('missing.key')
   })
 })

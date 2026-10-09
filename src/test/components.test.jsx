@@ -35,7 +35,8 @@ describe('PremiumPage', () => {
       '/api/subscription/invoice': { ok: true, invoice_url: 'https://t.me/$sub' },
     })
     render(<PremiumPage lang="en" />)
-    expect(await screen.findByText('⭐ 500 Stars')).toBeInTheDocument()
+    expect(await screen.findByText('500')).toBeInTheDocument()
+    expect(screen.getAllByText('Stars').length).toBeGreaterThan(0)
     expect(screen.getByText('10 selfies a day')).toBeInTheDocument()
     expect(screen.queryByText(/∞/)).not.toBeInTheDocument()
 
@@ -77,8 +78,8 @@ describe('GiftShop', () => {
     })
     const persona = { code: 'elif', name: 'Elif' }
     render(<GiftShop persona={persona} personas={[persona]} lang="en" />)
-    expect(await screen.findByText('⭐ 150')).toBeInTheDocument()
-    const buttons = screen.getAllByText('🎁 Give')
+    expect(await screen.findByText('150')).toBeInTheDocument()
+    const buttons = screen.getAllByRole('button', { name: 'Give' })
 
     fireEvent.click(buttons[0])
     await waitFor(() => expect(tg.showAlert).toHaveBeenCalledWith(expect.stringContaining('Roses')))
@@ -94,7 +95,7 @@ describe('GiftShop', () => {
     const tg = installTelegram({ languageCode: 'en' })
     mockFetch({ '/api/gifts': GIFTS, '/api/gifts/purchase': { __status: 429, body: { ok: false, error: 'free_gift_limit' } } })
     render(<GiftShop persona={null} personas={[]} lang="en" />)
-    fireEvent.click((await screen.findAllByText('🎁 Give'))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Give' }))[0])
     await waitFor(() => expect(tg.showAlert).toHaveBeenCalledWith(expect.stringContaining("today's free gift")))
   })
 })
@@ -111,8 +112,8 @@ describe('ProfilePage', () => {
     installTelegram({ languageCode: 'en' })
     const fetch = mockFetch({ '/api/profile/me': PROFILE })
     render(<ProfilePage lang="en" />)
-    fireEvent.click(await screen.findByText('✏️ Edit profile'))
-    fireEvent.change(screen.getByPlaceholderText('Age (18+)'), { target: { value: '16' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit profile' }))
+    fireEvent.change(screen.getByLabelText('Age (18+)'), { target: { value: '16' } })
     fireEvent.click(screen.getByText('Save'))
     expect(await screen.findByRole('alert')).toHaveTextContent('between 18 and 120')
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
@@ -122,7 +123,7 @@ describe('ProfilePage', () => {
     installTelegram({ languageCode: 'en' })
     mockFetch({ '/api/profile/me': PROFILE })
     render(<ProfilePage lang="en" />)
-    expect(await screen.findByText(/Videos · this week/)).toBeInTheDocument()
+    expect(await screen.findByText('· this week')).toBeInTheDocument()
   })
 
   it('asks to open in Telegram without initData', async () => {
@@ -154,5 +155,65 @@ describe('App persona selection', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Zeynep/ })[0])
     fireEvent.click(await screen.findByText('Start chatting'))
     await waitFor(() => expect(tg.sendData).toHaveBeenCalledWith(JSON.stringify({ persona: 'zeynep' })))
+  })
+})
+
+describe('Design refresh behaviour', () => {
+  it('persona sheet closes on Escape and binds the Telegram BackButton', async () => {
+    const tg = installTelegram({ languageCode: 'en' })
+    tg.BackButton = { show: vi.fn(), hide: vi.fn(), onClick: vi.fn(), offClick: vi.fn() }
+    mockFetch({ '/api/personas': { ok: false } })
+    render(<App />)
+    fireEvent.click(screen.getAllByRole('button', { name: /Elif/ })[0])
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAccessibleName(/Elif/)
+    expect(tg.BackButton.show).toHaveBeenCalled()
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(tg.BackButton.hide).toHaveBeenCalled()
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('gift shop shows a retry state when the catalog fails to load', async () => {
+    installTelegram({ languageCode: 'en' })
+    let calls = 0
+    mockFetch({
+      '/api/gifts': () => {
+        calls += 1
+        return calls === 1
+          ? { __status: 500, body: { ok: false } }
+          : { ok: true, categories: [], gifts: [{ id: 1, code: 'roses_bouquet', name: 'Roses', emoji: '🌹', price: 0 }] }
+      },
+    })
+    render(<GiftShop persona={null} personas={[]} lang="en" />)
+    expect(await screen.findByText('Could not load the gifts')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Roses')).toBeInTheDocument()
+  })
+
+  it('sends the gift to the recipient picked in the shop', async () => {
+    const tg = installTelegram({ languageCode: 'en' })
+    tg.showAlert = vi.fn()
+    const fetch = mockFetch({
+      '/api/gifts': { ok: true, categories: [], gifts: [{ id: 1, code: 'roses_bouquet', name: 'Roses', emoji: '🌹', price: 0 }] },
+      '/api/gifts/purchase': { ok: true, purchase: {} },
+    })
+    const personas = [{ code: 'elif', name: 'Elif' }, { code: 'zeynep', name: 'Zeynep' }]
+    render(<GiftShop persona={null} personas={personas} lang="en" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Zeynep' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Give' }))
+    await waitFor(() => expect(tg.showAlert).toHaveBeenCalledWith(expect.stringContaining('Zeynep')))
+    const purchase = fetch.mock.calls.find(([url]) => String(url).endsWith('/api/gifts/purchase'))
+    expect(JSON.parse(purchase[1].body)).toMatchObject({ persona: 'zeynep' })
+  })
+
+  it('offers an upgrade from the profile limits', async () => {
+    installTelegram({ languageCode: 'en' })
+    mockFetch({ '/api/profile/me': PROFILE })
+    const onUpgrade = vi.fn()
+    render(<ProfilePage lang="en" onUpgrade={onUpgrade} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Raise my limits' }))
+    expect(onUpgrade).toHaveBeenCalled()
+    expect(screen.getByText('not in your plan')).toBeInTheDocument()
   })
 })

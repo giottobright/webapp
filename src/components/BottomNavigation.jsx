@@ -1,28 +1,35 @@
 import React from 'react'
+import { Crown, Gift, Heart, UserPlus, UserRound } from 'lucide-react'
 import { t } from '../i18n'
 
-export default function BottomNavigation({ activeTab, onTabChange, lang }) {
-  const tabs = [
-    { id: 'girls', icon: '👥', label: t(lang, 'nav.girls') },
-    { id: 'shop', icon: '🎁', label: t(lang, 'nav.shop') },
-    { id: 'referrals', icon: '🔗', label: t(lang, 'nav.friends') },
-    { id: 'profile', icon: '👤', label: t(lang, 'nav.profile') },
-    { id: 'premium', icon: '⭐', label: t(lang, 'nav.premium') },
-  ]
+const TABS = [
+  { id: 'girls', Icon: Heart, label: 'nav.girls', fill: true },
+  { id: 'shop', Icon: Gift, label: 'nav.shop' },
+  { id: 'referrals', Icon: UserPlus, label: 'nav.friends' },
+  { id: 'profile', Icon: UserRound, label: 'nav.profile' },
+  { id: 'premium', Icon: Crown, label: 'nav.premium', fill: true },
+]
 
+export default function BottomNavigation({ activeTab, onTabChange, lang }) {
   return (
-    <nav className="bottom-nav">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          className={`nav-item ${activeTab === tab.id ? 'active' : ''}`}
-          onClick={() => onTabChange(tab.id)}
-          aria-current={activeTab === tab.id ? 'page' : undefined}
-        >
-          <span className="nav-icon">{tab.icon}</span>
-          <span className="nav-label">{tab.label}</span>
-        </button>
-      ))}
+    <nav className="bottom-nav" aria-label={t(lang, 'nav.label')}>
+      {TABS.map(({ id, Icon, label, fill }) => {
+        const active = activeTab === id
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`nav-item ${active ? 'active' : ''} ${id === 'premium' ? 'nav-item-premium' : ''}`}
+            onClick={() => onTabChange(id)}
+            aria-current={active ? 'page' : undefined}
+          >
+            <span className="nav-icon">
+              <Icon size={22} strokeWidth={active ? 2 : 1.75} fill={active && fill ? 'currentColor' : 'none'} />
+            </span>
+            <span className="nav-label">{t(lang, label)}</span>
+          </button>
+        )
+      })}
     </nav>
   )
 }
