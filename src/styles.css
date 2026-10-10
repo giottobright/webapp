@@ -1019,6 +1019,7 @@ input, textarea { caret-color: var(--rose-300); }
 .plan-price-value { font-size: 22px; font-weight: 700; line-height: 1; color: var(--ink); }
 .plan-price-unit { font-size: 14px; font-weight: 600; color: var(--ink-2); }
 .plan-price-period { font-size: 13px; color: var(--ink-3); }
+.plan-per-day { margin-top: 4px; font-size: 13px; color: var(--ink-3); }
 
 .plan-features { display: grid; gap: 10px; }
 .plan-features li {
@@ -1045,6 +1046,39 @@ input, textarea { caret-color: var(--rose-300); }
   color: var(--ink-3);
 }
 .note-icon { flex-shrink: 0; margin-top: 2px; }
+
+.packs { margin-top: 28px; }
+.packs-note { margin: -4px 0 12px; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
+.pack-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  text-align: left;
+  transition: transform 160ms var(--ease-out), border-color 160ms var(--ease-out);
+}
+.pack:active { transform: scale(0.98); }
+.pack:disabled { opacity: 0.6; }
+.pack[aria-busy="true"] { border-color: var(--gold-line); }
+.pack-icon { display: inline-flex; color: var(--rose-300); }
+.pack-name { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.pack-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ============================================================
    REFERRALS
@@ -1257,6 +1291,7 @@ input, textarea { caret-color: var(--rose-300); }
 .usage.is-unavailable .usage-top { margin-bottom: 0; }
 .usage.is-unavailable .usage-count { font-weight: 500; color: var(--ink-3); }
 .usage.is-full .usage-count { color: var(--gold); }
+.usage-credits { margin-left: 6px; color: var(--green); }
 
 .usage-track {
   height: 6px;

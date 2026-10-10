@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { BadgeCheck, Check, Crown, Gem, Info, Sparkles } from 'lucide-react'
+import { BadgeCheck, Camera, Check, Crown, Gem, Info, MessageCircle, Mic, Sparkles, Video } from 'lucide-react'
 import { apiFetch, haptic, insideTelegram, openInvoice, showAlert } from '../utils/api'
 import { formatDate, t } from '../i18n'
 import { ErrorState, Skeleton, StarsIcon } from './ui'
 
 const PLAN_ICONS = { free: Sparkles, premium: Crown, vip: Gem }
+const PACK_ICONS = { messages: MessageCircle, selfies: Camera, voices: Mic, videos: Video }
 
 export default function PremiumPage({ lang }) {
   const [plans, setPlans] = useState([])
+  const [packs, setPacks] = useState([])
   const [current, setCurrent] = useState({ plan: 'free', expires: null, recurring: false, known: false })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -34,7 +36,10 @@ export default function PremiumPage({ lang }) {
     Promise.all([
       apiFetch(`/api/plans?language=${lang}`).then(({ ok, status, data }) => {
         if (!alive) return
-        if (ok) setPlans(data.plans || [])
+        if (ok) {
+          setPlans(data.plans || [])
+          setPacks(data.packs || [])
+        }
         else setLoadError(status === 0 ? t(lang, 'common.offline') : t(lang, 'premium.loadFailed'))
       }),
       loadCurrent(),
@@ -60,6 +65,31 @@ export default function PremiumPage({ lang }) {
         showAlert(t(lang, 'premium.paid', { plan: plan?.name || planCode }))
         // The bot activates the plan when Telegram confirms the payment
         setTimeout(loadCurrent, 2500)
+      } else if (result === 'cancelled') {
+        showAlert(t(lang, 'premium.cancelled'))
+      } else if (result !== 'pending') {
+        showAlert(t(lang, 'premium.failed'))
+      }
+    } finally {
+      setUpgrading(null)
+    }
+  }
+
+  const handlePack = async (pack) => {
+    if (!insideTelegram()) { showAlert(t(lang, 'common.notTelegram')); return }
+    haptic('medium')
+    setUpgrading(pack.code)
+    try {
+      const { ok, data } = await apiFetch('/api/packs/invoice', { method: 'POST', body: { pack: pack.code } })
+      if (!ok || !data?.invoice_url) {
+        haptic('error')
+        showAlert(data?.error === 'age_not_confirmed' ? t(lang, 'common.openInTelegram') : t(lang, 'premium.failed'))
+        return
+      }
+      const result = await openInvoice(data.invoice_url)
+      if (result === 'paid') {
+        haptic('success')
+        showAlert(t(lang, 'premium.packPaid', { pack: pack.name }))
       } else if (result === 'cancelled') {
         showAlert(t(lang, 'premium.cancelled'))
       } else if (result !== 'pending') {
@@ -130,6 +160,9 @@ export default function PremiumPage({ lang }) {
                         <span className="plan-price-period">{t(lang, 'premium.perMonth')}</span>
                       </div>
                     )}
+                    {plan.stars > 0 && (
+                      <div className="plan-per-day">{t(lang, 'premium.perDayHint', { stars: Math.round(plan.stars / 30) })}</div>
+                    )}
                   </div>
                 </div>
 
@@ -155,6 +188,32 @@ export default function PremiumPage({ lang }) {
             )
           })}
         </div>
+      )}
+
+      {!loading && !loadError && packs.length > 0 && (
+        <section className="packs" aria-labelledby="packs-title">
+          <h2 className="section-title" id="packs-title">{t(lang, 'premium.packsTitle')}</h2>
+          <p className="packs-note">{t(lang, 'premium.packsNote')}</p>
+          <div className="pack-list">
+            {packs.map((pack) => {
+              const Icon = PACK_ICONS[pack.kind] || Sparkles
+              return (
+                <button
+                  key={pack.code}
+                  type="button"
+                  className="pack"
+                  onClick={() => handlePack(pack)}
+                  disabled={!!upgrading}
+                  aria-busy={upgrading === pack.code}
+                >
+                  <span className="pack-icon" aria-hidden="true"><Icon size={18} /></span>
+                  <span className="pack-name">{pack.name}</span>
+                  <span className="pack-price"><StarsIcon size={14} />{pack.stars}</span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       <p className="note"><Info size={16} className="note-icon" />{t(lang, 'premium.note')}</p>
