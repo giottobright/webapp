@@ -10,9 +10,13 @@ import { installTelegram, mockFetch } from './setup'
 const PLANS = {
   ok: true,
   plans: [
-    { code: 'free', name: 'Free', stars: 0, features: ['2 selfies a day'], limits: {}, periods: {} },
-    { code: 'premium', name: 'Premium', stars: 500, features: ['5 selfies a day'], limits: {}, periods: {} },
-    { code: 'vip', name: 'VIP', stars: 1000, features: ['10 selfies a day'], limits: {}, periods: {} },
+    { code: 'free', name: 'Free', stars: 0, features: ['1 selfie a week'], limits: {}, periods: {} },
+    { code: 'premium', name: 'Premium', stars: 750, features: ['3 selfies a day'], limits: {}, periods: {} },
+    { code: 'vip', name: 'VIP', stars: 1500, features: ['5 selfies a day'], limits: {}, periods: {} },
+  ],
+  packs: [
+    { code: 'selfies_10', kind: 'selfies', amount: 10, stars: 120, name: '+10 selfies' },
+    { code: 'messages_100', kind: 'messages', amount: 100, stars: 50, name: '+100 messages' },
   ],
 }
 
@@ -35,9 +39,10 @@ describe('PremiumPage', () => {
       '/api/subscription/invoice': { ok: true, invoice_url: 'https://t.me/$sub' },
     })
     render(<PremiumPage lang="en" />)
-    expect(await screen.findByText('500')).toBeInTheDocument()
+    expect(await screen.findByText('750')).toBeInTheDocument()
     expect(screen.getAllByText('Stars').length).toBeGreaterThan(0)
-    expect(screen.getByText('10 selfies a day')).toBeInTheDocument()
+    expect(screen.getByText('5 selfies a day')).toBeInTheDocument()
+    expect(screen.getByText('≈ 25 ⭐ a day')).toBeInTheDocument()
     expect(screen.queryByText(/∞/)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getAllByText('Choose plan')[1]) // VIP
@@ -55,6 +60,22 @@ describe('PremiumPage', () => {
     fireEvent.click((await screen.findAllByText('Choose plan'))[0])
     await waitFor(() => expect(tg.showAlert).toHaveBeenCalledWith('Payment cancelled'))
     expect(tg.sendData).not.toHaveBeenCalled()
+  })
+
+  it('sells one-time packs through openInvoice', async () => {
+    const tg = installTelegram({ languageCode: 'en' })
+    tg.openInvoice.mockImplementation((url, cb) => cb('paid'))
+    const fetch = mockFetch({
+      '/api/plans': PLANS,
+      '/api/profile/me': PROFILE,
+      '/api/packs/invoice': { ok: true, invoice_url: 'https://t.me/$pack' },
+    })
+    render(<PremiumPage lang="en" />)
+    fireEvent.click(await screen.findByRole('button', { name: /\+10 selfies/ }))
+    await waitFor(() => expect(tg.openInvoice).toHaveBeenCalledWith('https://t.me/$pack', expect.any(Function)))
+    const call = fetch.mock.calls.find(([url]) => String(url).includes('/api/packs/invoice'))
+    expect(JSON.parse(call[1].body)).toEqual({ pack: 'selfies_10' })
+    await waitFor(() => expect(tg.showAlert).toHaveBeenCalledWith('+10 selfies added!'))
   })
 })
 

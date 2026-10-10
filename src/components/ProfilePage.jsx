@@ -35,9 +35,9 @@ function Stat({ icon, value, label, lang }) {
   )
 }
 
-function UsageBar({ label, period, icon, used, limit, lang }) {
+function UsageBar({ label, period, icon, used, limit, credits = 0, lang }) {
   const unlimited = limit === -1
-  const unavailable = limit === 0
+  const unavailable = limit === 0 && !credits
   const pct = unlimited || unavailable ? 0 : Math.min(100, (used / limit) * 100)
   const full = !unlimited && !unavailable && used >= limit
   return (
@@ -50,6 +50,7 @@ function UsageBar({ label, period, icon, used, limit, lang }) {
         </span>
         <span className="usage-count">
           {unavailable ? t(lang, 'profile.unavailableOnPlan') : `${used} / ${unlimited ? '∞' : limit}`}
+          {credits > 0 && <span className="usage-credits">{t(lang, 'profile.credits', { count: credits })}</span>}
         </span>
       </div>
       {!unavailable && (
@@ -163,6 +164,7 @@ export default function ProfilePage({ lang, personas = [], onUpgrade }) {
   const plan = profile.plan || 'free'
   const companion = personas.find((p) => p.code === profile.persona)
   const usageRows = [
+    { kind: 'messages', icon: <MessageCircle size={16} />, label: t(lang, 'profile.messages') },
     { kind: 'selfies', icon: <Camera size={16} />, label: t(lang, 'profile.selfies') },
     { kind: 'videos', icon: <Video size={16} />, label: t(lang, 'profile.videos') },
     { kind: 'voices', icon: <Mic size={16} />, label: t(lang, 'profile.voice') },
@@ -202,10 +204,15 @@ export default function ProfilePage({ lang, personas = [], onUpgrade }) {
       <section className="profile-section">
         <h2 className="section-title">{t(lang, 'profile.usage')}</h2>
         <ul className="card usage-list">
-          {usageRows.map((row) => {
+          {usageRows.filter((row) => row.kind !== 'messages' || profile.today?.messages).map((row) => {
             const usage = profile.today?.[row.kind] || { used: 0, limit: 0, period: 'day' }
             const period = usage.period === 'week' ? t(lang, 'profile.perWeek') : t(lang, 'profile.perDay')
-            return <UsageBar key={row.kind} lang={lang} icon={row.icon} label={row.label} period={period} used={usage.used} limit={usage.limit} />
+            return (
+              <UsageBar
+                key={row.kind} lang={lang} icon={row.icon} label={row.label} period={period}
+                used={usage.used} limit={usage.limit} credits={usage.credits || 0}
+              />
+            )
           })}
         </ul>
         {plan !== 'vip' && onUpgrade && (
